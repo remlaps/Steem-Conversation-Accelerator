@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Extension Settings</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            width: 300px;
+            padding: 10px;
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+        }
+        select, input {
+            width: 100%;
+            padding: 5px;
+            margin-top: 5px;
+        }
+        .short-input {
+            width: 120px; /* Adjust the width as needed */
+        }
+        #saveButton {
+            margin-top: 10px; /* Add padding/margin top to the button */
+            padding: 10px; /* Optional: Add padding inside the button */
+        }
+    </style>
+</head>
+<body>
+    <h2>Extension Settings</h2>
+    <label for="pollingTime">Polling Time (minutes)</label>
+    <select id="pollingTime" class="short-input">
+        <option value="1">1</option>
+        <option value="5">5</option>
+        <option value="10">10</option>
+        <option value="30">30</option>
+    </select>
+
+    <label for="username">Steem Account Name</label>
+    <input type="text" id="username" placeholder="Enter your Steem account name" maxlength="16" class="short-input">
+
+    <label for="apiServerName">API Endpoint</label>
+    <select id="apiServerName">
+        <option value="https://api.moecki.online">api.moecki.online</option>
+        <option value="https://api.pennsif.net">api.pennsif.net</option>
+        <option value="https://api.steememory.com">api.steememory.com</option>
+        <option value="https://api.steemit.com">api.steemit.com</option>
+        <option value="https://api.steemitdev.com">api.steemitdev.com</option>
+    </select>
+
+    <label for="webServerName">Web Server</label>
+    <select id="webServerName">
+        <option value="https://steemit.com">Steemit Prod</option>
+        <option value="https://steemitdev.com">Steemit Dev</option>
+        <option value="https://steempro.com">SteemPro</option>
+        <option value="https://upvu.org">Upvu</option>
+    </select>
+
+    <button id="saveButton">Save Settings</button>
+
+    <script src="popup.js"></script>
+</body>
+</html>

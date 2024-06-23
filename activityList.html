@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Steem Conversation Accelerator (SCA)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        h1 {
+            font-size: 1.5rem;
+        }
+        ul {
+            list-style-type: none;
+            padding-left: 0;
+        }
+        li {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>New Activity on Steem</h1>
+    <p>Activity observed after: <span id="previous-alert-time">Loading...</span></p>
+    <ul id="accountsList">
+        <!-- Accounts with new activity will be dynamically added here -->
+    </ul>
+    <script src="localStorageUtils.js"></script>
+    <script src="activityList.js"></script>
+</body>
+</html>

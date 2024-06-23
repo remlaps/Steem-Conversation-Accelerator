@@ -1,0 +1,22 @@
+{
+    "manifest_version": 3,
+    "name": "Steem Conversation Accelerator (SCA)",
+    "version": "1.0",
+    "permissions": [
+        "alarms",
+        "idle",
+        "storage",
+        "notifications"
+    ],
+    "background": {
+        "service_worker": "background.js"
+    },
+    "action": {
+        "default_popup": "popup.html"
+    },
+    "icons": {
+        "16": "SCAicon16.png",
+        "48": "SCAicon48.png",
+        "128": "SCAicon128.png"
+    }
+}
