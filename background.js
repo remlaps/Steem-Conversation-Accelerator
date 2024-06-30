@@ -26,6 +26,8 @@ chrome.runtime.onInstalled.addListener(function (details) {
     chrome.storage.local.get(['steemUsername'], async (result) => {
         const steemUsername = result.steemUsername;
         if (steemUsername) {
+            // This should probably never happen, since local storage was cleared above.
+            // The onChanged listener sets an alarm when the username and polling time are entered.
             await saveIsCheckingActivity(false);
             await checkForNewActivitySinceLastNotification(steemUsername);
             await setupAlarms();
@@ -35,22 +37,6 @@ chrome.runtime.onInstalled.addListener(function (details) {
     });
     showAlarms();
 });
-// Detect browser idle state
-
-chrome.idle.onStateChanged.addListener(state => {
-    showAlarms();
-    if (state === 'idle') {
-        // Browser is idle, disable the onAlarm listener
-        console.log("Browser is idle.  Disabling the alarms.");
-        clearAlarms();
-    } else if (state === 'active') {
-        // Browser is active, re-enable the onAlarm listener
-        console.log("Browser is active.  Setting the alarms.");
-        setupAlarms();
-    }
-    showAlarms();
-});
-
 
 
 chrome.storage.onChanged.addListener((changes, area) => {
@@ -65,6 +51,19 @@ chrome.storage.onChanged.addListener((changes, area) => {
     showAlarms();
 });
 
+chrome.idle.onStateChanged.addListener(state => {
+    if (state === 'idle') {
+        // Browser is idle, disable the onAlarm listener
+        console.log("Browser is idle.  Disabling the alarms.");
+        clearAlarms();
+    } else if (state === 'active') {
+        // Browser is active, re-enable the onAlarm listener
+        console.log("Browser is active.  Setting the alarms.");
+        setupAlarms();
+    }
+});
+
+
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'checkSteemActivity') {
         console.log("Alarm recieved.");
@@ -73,21 +72,23 @@ chrome.alarms.onAlarm.addListener((alarm) => {
             if (steemUsername) {
                 await checkForNewActivitySinceLastNotification(steemUsername);
             } else {
-                console.error('Steem username not set. Please set it in the extension settings.');
+                console.log('Alarm triggered, but the Steem username is not set in SCA.');
+                console.log('Please set it in the extension settings.');
             }
         });
         console.log("Ending alarm processing.");
     }
 });
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.type === 'GET_USERNAME') {
-        chrome.storage.local.get(['steemUsername'], (result) => {
-            sendResponse(result.steemUsername);
-        });
-        return true; // Will respond asynchronously
-    }
-});
+// Probably unneeded.  Doesn't seem to be in use.
+//chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+//    if (message.type === 'GET_USERNAME') {
+//        chrome.storage.local.get(['steemUsername'], (result) => {
+//            sendResponse(result.steemUsername);
+//        });
+//        return true; // Will respond asynchronously
+//    }
+//});
 
 /***
  * 
@@ -244,9 +245,8 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                     if (!accountsWithNewActivity.includes(followedAccount)) {
                         accountsWithNewActivity.push(followedAccount);
                     }
-                    console.log(`New activity observed from ${followedAccount} after ${sT}. Last activity: ${cT}.`);
                 } else {
-                    console.log(`No recent actions observed from ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime}.`);
+                    // nothing to do right now.
                 }
 
                 // Save progress every 10 accounts checked
@@ -255,6 +255,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                         lastCheckedIndex: i,
                         accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
                     });
+                    console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime}.`);
                 }
 
                 // Add a small delay to avoid overwhelming the API
