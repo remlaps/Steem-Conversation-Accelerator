@@ -1,117 +1,94 @@
 /* global chrome */
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const {accountsWithNewActivity, currentCheckTime, lastNotificationTime} =
+            await chrome.storage.local.get(['accountsWithNewActivity', 'currentCheckTime', 'lastNotificationTime']);
+    const accounts = JSON.parse(accountsWithNewActivity || '[]');
 
-    // Update HTML content with the previous alert time
-    const previousAlertTime = await getPreviousAlertTime();
-    console.log(`Processing activity after: ${previousAlertTime}`);
-    const lastAlertTime = await getLastAlertTime();
+    // Update HTML content with the previous notification time
+    const previousNotificationTime = lastNotificationTime || 'Not available';
+    console.log(`Processing activity after: ${lastNotificationTime}`);
 
     const previousAlertTimeField = document.getElementById("previous-alert-time");
-
     if (previousAlertTimeField) {
-        previousAlertTimeField.textContent = previousAlertTime || 'Not available';
+        previousAlertTimeField.textContent = lastNotificationTime;
     }
-    console.log(`last alert time: ${lastAlertTime}, previous alert time ${previousAlertTime}`);
-    try {
-        // Retrieve accountsWithNewActivity from chrome.storage.local
-        let accountsWithNewActivity = [];
-        let storedData = await getStoredAccountsWithNewActivity();
 
-        if (storedData) {
-            accountsWithNewActivity = JSON.parse(storedData);
-        }
+    // Remove duplicates using a Set and convert back to an Array
+    const uniqueAccountsWithNewActivity = [...new Set(accounts)];
+    const listSize = uniqueAccountsWithNewActivity.length;
+    const listValues = uniqueAccountsWithNewActivity.join(', ');
+    console.log(`Accounts with new activity: ${listValues}, size: ${listSize}`);
 
-        // Remove duplicates using a Set
-        const uniqueAccountsWithNewActivity = new Set(accountsWithNewActivity);
-        listSize = uniqueAccountsWithNewActivity.size;
-        listValues = uniqueAccountsWithNewActivity.toString();
-        console.log(`Accounts with new activity: ${listValues}, size: ${listSize}`);
+    const accountsList = document.getElementById('accountsList');
+    async function updateAccountsList() {
+        if (uniqueAccountsWithNewActivity.length === 0) {
+            const listItem = document.createElement('li');
+            listItem.textContent = 'No new activity detected.';
+            accountsList.appendChild(listItem);
+        } else {
+            const apiEndpoint = await getApiServerName();
 
-        const accountsList = document.getElementById('accountsList');
-        async function updateAccountsList() {
-            const accountsList = document.getElementById('accountsList');
-
-            if (uniqueAccountsWithNewActivity.size === 0) {
+            for (const account of uniqueAccountsWithNewActivity) {
                 const listItem = document.createElement('li');
-                listItem.textContent = 'No new activity detected.';
-                accountsList.appendChild(listItem);
-            } else {
-                const apiEndpoint = await getApiServerName();
+                const webServerName = await getWebServerName();
+                const accountURL = `${webServerName}/@${account}`;
 
-                for (const account of uniqueAccountsWithNewActivity) {
-                    const listItem = document.createElement('li');
-                    const webServerName = await getWebServerName(); // getWebServerName is in localStorageUtils.js
-                    const accountURL = `${webServerName}/@${account}`;
+                try {
+                    console.log(`account: ${account}, startTime: ${previousNotificationTime}, api Endpoint: ${apiEndpoint} - before getAccountActivities`);
+                    const {postList, commentList, replyList} = await getAccountActivities(account, previousNotificationTime, apiEndpoint);
 
-                    try {
-                        console.log (`account: ${account}, startTime: ${previousAlertTime}, api Endpoint: ${apiEndpoint} - before getAccountActivities`);
-                        const {postList, commentList, replyList} = await getAccountActivities(account, previousAlertTime, apiEndpoint);
-//                        console.log(`post list: ${postList}`);
-//                        console.log(`comment list: ${commentList}`);
-//                        console.log(`reply list: ${replyList}`);
+                    // Create the HTML content for the account
+                    let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
 
-                        // Create the HTML content for the account
-                        let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
-
-                        if (postList.length > 0) {
-                            content += `<strong>Posts:</strong><ul>`;
-                            postList.forEach(post => {
-                                content += `<li>${JSON.stringify(post)}</li>`;
-                            });
-                            content += `</ul>`;
-                        } else {
-                            content += `<strong>Posts:</strong><p>No posts found.</p>`;
-                        }
-
-                        if (commentList.length > 0) {
-                            content += `<strong>Comments:</strong><ul>`;
-                            commentList.forEach(comment => {
-                                content += `<li>${JSON.stringify(comment)}</li>`;
-                            });
-                            content += `</ul>`;
-                        } else {
-                            content += `<strong>Comments:</strong><p>No comments found.</p>`;
-                        }
-
-                        if (replyList.length > 0) {
-                            content += `<strong>Replies:</strong><ul>`;
-                            replyList.forEach(reply => {
-                                content += `<li>${JSON.stringify(reply)}</li>`;
-                            });
-                            content += `</ul>`;
-                        } else {
-                            content += `<strong>Replies:</strong><p>No replies found.</p>`;
-                        }
-
-                        listItem.innerHTML = content;
-                    } catch (error) {
-                        console.error(`Error fetching activities for account ${account}:`, error);
-                        listItem.textContent = `Error fetching activities for account ${account}`;
+                    if (postList.length > 0) {
+                        content += `<strong>Posts:</strong><ul>`;
+                        postList.forEach(post => {
+                            content += `<li>${JSON.stringify(post)}</li>`;
+                        });
+                        content += `</ul>`;
+                    } else {
+                        content += `<strong>Posts:</strong><p>No posts found.</p>`;
                     }
 
-                    accountsList.appendChild(listItem);
+                    if (commentList.length > 0) {
+                        content += `<strong>Comments:</strong><ul>`;
+                        commentList.forEach(comment => {
+                            content += `<li>${JSON.stringify(comment)}</li>`;
+                        });
+                        content += `</ul>`;
+                    } else {
+                        content += `<strong>Comments:</strong><p>No comments found.</p>`;
+                    }
+
+                    if (replyList.length > 0) {
+                        content += `<strong>Replies:</strong><ul>`;
+                        replyList.forEach(reply => {
+                            content += `<li>${JSON.stringify(reply)}</li>`;
+                        });
+                        content += `</ul>`;
+                    } else {
+                        content += `<strong>Replies:</strong><p>No replies found.</p>`;
+                    }
+                    listItem.innerHTML = content;
+                } catch (error) {
+                    console.error(`Error fetching activities for account ${account}:`, error);
+                    listItem.textContent = `Error fetching activities for account ${account}`;
                 }
+
+                accountsList.appendChild(listItem);
             }
         }
-
-        await updateAccountsList();
-        
-        // Clear the stored account array and save the previousAlertTime to chrome.storage.local
-        await clearStoredAccountsWithNewActivity();
-        chrome.storage.local.set({'previousAlertTime': lastAlertTime}, function () {
-            if (chrome.runtime.lastError) {
-                console.error('Error saving previousAlertTime to storage:', chrome.runtime.lastError);
-            } else {
-                console.log(`saved previousAlertTime as ${previousAlertTime}`);
-            }
-        });
-        
-        console.log('accountsWithNewActivity has been reset.');
-
-    } catch (error) {
-        console.error('Error:', error);
     }
+
+    await updateAccountsList();
+
+    // Clear the stored account array and save the previousAlertTime to chrome.storage.local
+    await clearStoredAccountsWithNewActivity();
+    await chrome.storage.local.set({lastNotificationTime: currentCheckTime});
+
+    console.log(`Updated lastNotificationTime to: ${currentCheckTime}`);
+    console.log('accountsWithNewActivity has been reset.');
 });
 
 // Function to retrieve stored accountsWithNewActivity from chrome.storage.local
@@ -191,7 +168,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
     let transactionTime = lastActivity.result[0][1].timestamp;
     let transactionTimeStamp = new Date(transactionTime + 'Z').getTime();
     console.log(`start time: ${startTime}, transaction time stamp: ${transactionTime}`);
-    console.log (`start time stamp: ${startTimeStamp}, transaction time: ${transactionTimeStamp}`);
+    console.log(`start time stamp: ${startTimeStamp}, transaction time: ${transactionTimeStamp}`);
 
     while (startTimeStamp < transactionTimeStamp) {
         console.log(`looking for transactions in ${account} account  history.`);
@@ -201,7 +178,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
         }
         lastActivity.result.forEach(activity => {
             activities.push(activity);  // Add the entire activity object to the array
-            
+
             if (startTimeStamp < transactionTimeStamp) {
                 let steemOp = activity[1]?.op?.[0];
                 console.log(`Steem operation: ${steemOp}`);
@@ -221,7 +198,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
             }
         });
 
-        console.log (`Transaction index: ${transactionIndex}`);
+        console.log(`Transaction index: ${transactionIndex}`);
         console.log(`start time: ${startTime}, transaction time: ${transactionTime}`);
         console.log(`start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
         transactionIndex--;

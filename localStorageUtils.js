@@ -4,7 +4,7 @@
 
 function getApiServerName() {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.get(['apiServerName'], function(result) {
+    chrome.storage.local.get(['apiServerName'], function(result) {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
@@ -16,7 +16,7 @@ function getApiServerName() {
 
 async function getWebServerName() {
   return new Promise((resolve, reject) => {
-    chrome.storage.sync.get(['webServerName'], function(result) {
+    chrome.storage.local.get(['webServerName'], function(result) {
       if (chrome.runtime.lastError) {
         reject(chrome.runtime.lastError);
       } else {
@@ -28,11 +28,11 @@ async function getWebServerName() {
 
 function getStoredUser() {
     return new Promise((resolve, reject) => {
-        chrome.storage.sync.get(['username'], function (result) {
+        chrome.storage.local.get(['steemUsername'], function (result) {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
             } else {
-                resolve(result.username);
+                resolve(result.steemUsername);
             }
         });
     });
@@ -58,6 +58,31 @@ async function getPreviousAlertTime() {
             } else {
                 resolve(result.previousAlertTime || '2024-01-01T00:00:00Z'); // Default start time if not set
             }
+        });
+    });
+}
+
+
+function saveIsCheckingActivity(isCheckingActivity) {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.set({ isCheckingActivity: isCheckingActivity }, function() {
+            if (chrome.runtime.lastError) {
+                return reject(chrome.runtime.lastError);
+            }
+            console.log('Value is set to ' + isCheckingActivity);
+            resolve();
+        });
+    });
+}
+
+async function getIsCheckingActivity() {
+    return new Promise((resolve, reject) => {
+        chrome.storage.local.get(['isCheckingActivity'], function(result) {
+            if (chrome.runtime.lastError) {
+                return reject(chrome.runtime.lastError);
+            }
+            const isCheckingActivity = result.isCheckingActivity !== undefined ? result.isCheckingActivity : false;
+            resolve(isCheckingActivity);
         });
     });
 }

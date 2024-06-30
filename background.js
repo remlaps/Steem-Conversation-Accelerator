@@ -7,92 +7,76 @@ if (typeof browser === "undefined") {
 // Import additional scripts
 importScripts('localStorageUtils.js');
 
-// Detect browser idle state
-chrome.idle.onStateChanged.addListener(state => {
-    if (state === 'idle') {
-        // Browser is idle, disable the onAlarm listener
-        console.log("Browser is idle.  Disabling the alarms.");
-        showAlarms();
-        clearAlarms();
-    } else if (state === 'active') {
-        // Browser is active, re-enable the onAlarm listener
-        console.log("Browser is active.  Setting the alarms.");
-        setupAlarms(); 
-        showAlarms();
-    }
-});
-
-function showAlarms() {
-    // Get all scheduled alarms
-    chrome.alarms.getAll(alarms => {
-        if (alarms.length === 0) {
-            console.log('No alarms currently scheduled.');
-        } else {
-            console.log('Currently scheduled alarms:');
-            alarms.forEach(alarm => {
-                console.log(`- Alarm "${alarm.name}" at ${new Date(alarm.scheduledTime)}`);
-            });
-        }
-    });
-}
-
-function clearAlarms() {
-    chrome.alarms.clear('checkSteemActivity', wasCleared => {
-        if (wasCleared) {
-            console.log('Alarm "checkSteemActivity" cleared successfully.');
-        } else {
-            console.log('Alarm "checkSteemActivity" not found or could not be cleared.');
-        }
-    });
-}
-
-// Set the alarms (when the extension loads or activates, or after the last poll finishes)
-function setupAlarms() {
-    let pollingTime = 7;
-    chrome.storage.sync.get(['pollingTime'], async (result) => {
-        if (result.pollingTime) {
-            pollingTime = result.pollingTime;
-            console.log(`Setting alarm with polling time: ${result.pollingTime}`);
-            chrome.alarms.create('checkSteemActivity', {periodInMinutes: pollingTime});
-        } else {
-            console.log(`Setting alarm with polling time: ${pollingTime}`);
-            chrome.alarms.create('checkSteemActivity', {periodInMinutes: pollingTime});
-        }
-        showAlarms();
-    });
-}
-
-chrome.runtime.onInstalled.addListener(function(details) {
+chrome.runtime.onInstalled.addListener(function (details) {
+    let pluginStartTime = new Date().toISOString();
     if (details.reason === 'install') {
+        console.log(`plugin installed at ${pluginStartTime}`);
+        chrome.storage.sync.clear();
+        chrome.storage.local.clear();
         chrome.windows.create({
             url: chrome.runtime.getURL('popup.html'),
             type: 'popup',
             width: 500,
             height: 600
         });
+
+    } else if (details.reason === 'update') {
+        console.log(`plugin updated at ${pluginStartTime}`);
     }
+    chrome.storage.local.get(['steemUsername'], async (result) => {
+        const steemUsername = result.steemUsername;
+        if (steemUsername) {
+            await saveIsCheckingActivity(false);
+            await checkForNewActivitySinceLastNotification(steemUsername);
+            await setupAlarms();
+        } else {
+            console.log('Steem username not set for SCA. Please set it in the extension settings.');
+        }
+    });
+    showAlarms();
+});
+// Detect browser idle state
+
+chrome.idle.onStateChanged.addListener(state => {
+    showAlarms();
+    if (state === 'idle') {
+        // Browser is idle, disable the onAlarm listener
+        console.log("Browser is idle.  Disabling the alarms.");
+        clearAlarms();
+    } else if (state === 'active') {
+        // Browser is active, re-enable the onAlarm listener
+        console.log("Browser is active.  Setting the alarms.");
+        setupAlarms();
+    }
+    showAlarms();
 });
 
-chrome.storage.onChanged.addListener((changes, namespace) => {
-    async function resetAfterChanges() {
-        if (namespace === 'sync') {
-            await clearAlarms();
-            await setupAlarms();
-        }
+
+
+chrome.storage.onChanged.addListener((changes, area) => {
+    console.log(`Change: ${changes} observed.`);
+    function resetAfterChanges() {
+        clearAlarms();
+        setupAlarms();
     }
-    resetAfterChanges();
+    if (area === 'local' ) {
+        resetAfterChanges();
+    }
+    showAlarms();
 });
 
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'checkSteemActivity') {
+        console.log("Alarm recieved.");
         chrome.storage.local.get(['steemUsername'], async (result) => {
-            const username = result.steemUsername;
-            if (username) {
-                checkForNewActivitySinceLastAlert(username);
+            const steemUsername = result.steemUsername;
+            if (steemUsername) {
+                await checkForNewActivitySinceLastNotification(steemUsername);
             } else {
                 console.error('Steem username not set. Please set it in the extension settings.');
             }
         });
+        console.log("Ending alarm processing.");
     }
 });
 
@@ -105,90 +89,243 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
 });
 
+/***
+ * 
+ * Alarm methods begin here:
+ *    - clearAlarms()
+ *    - setupAlarms()
+ *    - showAlarms()
+ * 
+ */
+function clearAlarms() {
+    chrome.alarms.clear('checkSteemActivity', wasCleared => {
+        if (wasCleared) {
+            console.log('Alarm "checkSteemActivity" cleared successfully.');
+        } else {
+            console.log('Alarm "checkSteemActivity" not found or could not be cleared.');
+        }
+    });
+}
+
+// Set the alarms (when the extension loads or activates, or after the last poll finishes)
+function setupAlarms() {
+    chrome.storage.local.get(['pollingTime'], (result) => {
+        let pollingTime = result.pollingTime || 7; // default to 7 if pollingTime is not set
+
+        chrome.alarms.get('checkSteemActivity', (existingAlarm) => {
+            if (!existingAlarm) {
+                chrome.alarms.create('checkSteemActivity', {periodInMinutes: pollingTime});
+                console.log(`A 'checkSteemActivity' alarm has been set with polling time: ${pollingTime}`);
+            }
+        });
+    });
+}
+
+function showAlarms() {
+    // Get all scheduled alarms
+    chrome.alarms.getAll(alarms => {
+        if (alarms.length === 0) {
+            console.log('No alarms currently scheduled.');
+        } else {
+            console.log('Currently scheduled alarms:');
+            alarms.forEach(alarm => {
+                const gmtTime = new Date(alarm.scheduledTime).toISOString();
+                console.log(`- Alarm "${alarm.name}" at ${new Date(alarm.scheduledTime)}`);
+            });
+        }
+    });
+}
+
+async function getActivityTimeWithRetry(followedAccount, apiNode, retries = 3) {
+    try {
+        const currentActivityTime = await getActivityTime(followedAccount, apiNode);
+        if (currentActivityTime !== null) {
+            return currentActivityTime;
+        } else {
+            console.warn(`Failed to get activity time for ${followedAccount}. Retrying in 1 second... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
+            if (retries > 0) {
+                return getActivityTimeWithRetry(followedAccount, apiNode, retries - 1);
+            } else {
+                console.error(`Failed to get activity time for ${followedAccount} after maximum retries.`);
+                return null;
+            }
+        }
+    } catch (error) {
+        console.error(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
+        if (retries > 0) {
+            console.warn(`Retrying getActivityTimeWithRetry for ${followedAccount} in 1 second... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
+            return getActivityTimeWithRetry(followedAccount, apiNode, retries - 1);
+        } else {
+            console.error(`Failed to get activity time for ${followedAccount} after maximum retries due to error.`);
+            return null;
+        }
+    }
+}
+
+async function getFollowingListWithRetry(steemUsername, apiNode, retries = 10) {
+    while (retries > 0) {
+        try {
+            const followingList = await getFollowingList(steemUsername, apiNode);
+            // Clear the stored progress after successful completion
+            await chrome.storage.local.remove(['lastFetchedUser', 'partialFollowingList']);
+            return followingList;
+        } catch (error) {
+            retries--;
+            console.warn(`Failed to get following list for ${steemUsername}. Retrying in 1 second.`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+    console.error(`Retry limit exceeded. Failed to get following list. Skipping ${steemUsername}...`);
+    return [];
+}
+
 let accountsWithNewActivity = []; // must be global to pass to activityList.
 let savedAccountList = [];
 
 let isCheckingActivity = false;
 
-async function checkForNewActivitySinceLastAlert(username) {
-    if (isCheckingActivity) {
-        console.log('checkForNewActivitySinceLastAlert is already running.');
-        return;
-    }
-
-    isCheckingActivity = true;
+async function checkForNewActivitySinceLastNotification(steemUsername) {
     try {
-        clearAlarms();
-    } catch {
-    }
-    try {
-        let result = await chrome.storage.local.get('lastAlertTime'); // These two lines don't do anything except declaring the variable(?)
-        let lastAlertTime = result.lastAlertTime; // These two lines don't do anything except declaring the variable(?)
-
-        accountsWithNewActivity = savedAccountList;
-        if (!lastAlertTime) {
-            const now = new Date();
-            lastAlertTime = now.toISOString(); // Initialize with current UTC date and time if not previously set
-            
-            // Save in chrome.storage.local
-            await chrome.storage.local.set({ 'lastAlertTime': lastAlertTime });
-        } else {
-            lastAlertTime = new Date(lastAlertTime);
-            lastAlertTime.setMinutes(lastAlertTime.getMinutes() + lastAlertTime.getTimezoneOffset()); // Adjust to UTC time
+        let isCheckingActivity = await getIsCheckingActivity();
+        if (isCheckingActivity) {
+            console.log('checkForNewActivitySinceLastNotification is already running.');
+            return;
         }
-        console.log("Checking for new activity after ", lastAlertTime);
+        isCheckingActivity = true;
+        await saveIsCheckingActivity(isCheckingActivity);
 
-        let newActivityFound = false;
-        username = await getStoredUser();
+        // Retrieve stored progress
+        let { lastAlertTime, lastNotificationTime, accountsWithNewActivity, lastCheckedIndex } = 
+            await chrome.storage.local.get(['lastAlertTime', 'lastNotificationTime', 'accountsWithNewActivity', 'lastCheckedIndex']);
+
+        const currentCheckTime = new Date().toISOString();
+        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+        if ( ! lastNotificationTime ) {
+            await chrome.storage.local.set({lastNotificationTime: fifteenMinutesAgo});
+        }
+
+        // Initialize lastAlertTime if it doesn't exist
+        lastAlertTime = lastAlertTime || fifteenMinutesAgo;
+
+        // Initialize lastNotificationTime if it doesn't exist
+        lastNotificationTime = lastNotificationTime || lastAlertTime;
+
+        // Use the more recent of lastNotificationTime and fifteenMinutesAgo as the start time for checking
+        const checkStartTime = new Date(Math.max(new Date(lastNotificationTime), new Date(fifteenMinutesAgo))).toISOString();
+
+        console.log(`Last alert time: ${lastAlertTime}`);
+        console.log(`Last notification time: ${lastNotificationTime}`);
+        console.log(`Check start time: ${checkStartTime}`);
+
+        accountsWithNewActivity = JSON.parse(accountsWithNewActivity || '[]');
+        lastCheckedIndex = lastCheckedIndex || 0;
+
+        console.log(`Resuming check from index ${lastCheckedIndex}`);
+
+        let newActivityFound = accountsWithNewActivity.length > 0;
+        steemUsername = await getStoredUser();
         apiNode = await getApiServerName();
-        
-        const followingList = await getFollowingList(username, apiNode);
+        const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
 
-        for (let user of followingList) {
-            const currentActivityTime = await getActivityTime(user, apiNode);
-            if (!currentActivityTime) {
-                console.log(`Failed to fetch activity time for ${user}. Skipping.`);
-                continue; // Skip to the next user if fetching activity time fails
-            }
+        for (let i = lastCheckedIndex; i < followingList.length; i++) {
+            const followedAccount = followingList[i];
+            try {
+                const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode);
+                if (currentActivityTime === null) {
+                    console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
+                    continue;
+                }
+                const cT = new Date(`${currentActivityTime}Z`);
+                const sT = new Date(checkStartTime);
+                if (sT < cT) {
+                    newActivityFound = true;
+                    if (!accountsWithNewActivity.includes(followedAccount)) {
+                        accountsWithNewActivity.push(followedAccount);
+                    }
+                    console.log(`New activity observed from ${followedAccount} after ${sT}. Last activity: ${cT}.`);
+                } else {
+                    console.log(`No recent actions observed from ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime}.`);
+                }
 
-            if (new Date(currentActivityTime) > lastAlertTime) {
-                newActivityFound = true;
-                accountsWithNewActivity.push(user);
-                console.log(`New activity from ${user} since your last check!`);
+                // Save progress every 10 accounts checked
+                if (i % 10 === 0) {
+                    await chrome.storage.local.set({
+                        lastCheckedIndex: i,
+                        accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
+                    });
+                }
+
+                // Add a small delay to avoid overwhelming the API
+                await new Promise(resolve => setTimeout(resolve, 100));
+
+            } catch (error) {
+                console.error(`Error checking activity for ${followedAccount}:`, error);
             }
         }
-        
+
+        console.log("Done checking activity times.");
+        console.log(`newActivityFound: ${newActivityFound}`);
+        console.log(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
+
         if (newActivityFound) {
             const size = accountsWithNewActivity.length;
+            console.log(`Number of accounts with new activity: ${size}`);
             const notificationMessage = `${size} new post(s) or comment(s) were observed from your followed account(s)!`;
-            chrome.storage.local.set({accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)}); // Save to local storage
-            displayBrowserNotification(notificationMessage);
-            savedAccountList = accountsWithNewActivity;
+            await chrome.storage.local.set({ 
+                accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
+                currentCheckTime: currentCheckTime
+            });
+            try {
+                await displayBrowserNotification(notificationMessage);
+                console.log("Browser notification displayed successfully.");
+            } catch (error) {
+                console.error("Error displaying browser notification:", error);
+            }
+        } else {
+            console.log("No new activity found, skipping notification.");
         }
-            
-        // Save lastAlertTime to chrome.storage.local
-         chrome.storage.local.set({ 'lastAlertTime': new Date().toISOString() }, function() {
-             if (chrome.runtime.lastError) {
-                 console.error('Error saving lastAlertTime to storage:', chrome.runtime.lastError);
-             }
-         });
-    
+
+        // Update lastAlertTime
+        await chrome.storage.local.set({
+            'lastAlertTime': currentCheckTime,
+            'lastCheckedIndex': 0
+        });
+
     } catch (error) {
         console.error('Error checking for new activity since last alert:', error);
     } finally {
-        setupAlarms();
         isCheckingActivity = false;
+        await saveIsCheckingActivity(isCheckingActivity);
     }
 }
 
-function displayBrowserNotification(message) {
-    console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
-    chrome.notifications.create({
-        type: 'basic',
-        iconUrl: 'SCAicon.png',
-        title: 'Steem Activity Alert',
-        message: message
+let lastNotificationId = null;
+async function displayBrowserNotification(message) {
+  console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
+  
+  // Clear the old notification if it exists
+  if (lastNotificationId !== null) {
+    chrome.notifications.clear(lastNotificationId, function(wasCleared) {
+      if (wasCleared) {
+        console.log("Previous notification cleared.");
+      } else {
+        console.log("No previous notification to clear.");
+      }
     });
+  }
+
+  // Create a new notification
+  chrome.notifications.create({
+    type: 'basic',
+    iconUrl: 'SCAicon.png',
+    title: 'Steem Activity Alert',
+    message: message
+  }, function(notificationId) {
+    // Store the new notification ID
+    lastNotificationId = notificationId;
+  });
 }
 
 // Handle notification click
@@ -198,12 +335,20 @@ chrome.notifications.onClicked.addListener(() => {
     savedAccountList = [];
 });
 
-async function getFollowingList(username, apiNode, limit = 100) {
+async function getFollowingList(steemUsername, apiNode, limit = 100) {
     let followingList = [];
     let start = '';
-    try {
-        console.log(`Retrieving follower list for ${username} from: ${apiNode}`);
 
+    // Retrieve stored progress
+    const storedData = await chrome.storage.local.get(['lastFetchedUser', 'partialFollowingList']);
+    if (storedData.lastFetchedUser && storedData.partialFollowingList) {
+        start = storedData.lastFetchedUser;
+        followingList = storedData.partialFollowingList;
+        console.log(`Resuming from ${start} with ${followingList.length} users already fetched.`);
+    }
+
+    try {
+        console.log(`Retrieving follower list for ${steemUsername} from: ${apiNode}`);
         do {
             const response = await fetch(apiNode, {
                 method: 'POST',
@@ -213,43 +358,46 @@ async function getFollowingList(username, apiNode, limit = 100) {
                 body: JSON.stringify({
                     jsonrpc: '2.0',
                     method: 'follow_api.get_following',
-                    params: [username, start, 'blog', limit],
+                    params: [steemUsername, start, 'blog', limit],
                     id: 1
                 })
             });
             const data = await response.json();
-
             if (data.error) {
                 console.error('Error fetching following list:', data.error.message);
-                break; // Exit loop on error
+                break;
             }
-
             const users = data.result.map(user => user.following);
             followingList = followingList.concat(users);
-
-            // Update start for the next request
             start = users.length === limit ? users[users.length - 1] : null;
-
-            // Log current iteration
             console.log(`Fetched ${users.length} users. Next start: ${start}`);
+
+            // Save progress after each successful fetch
+            await chrome.storage.local.set({
+                lastFetchedUser: start,
+                partialFollowingList: followingList
+            });
+
         } while (start);
 
-        // Remove duplicates (in case of pagination overlap)
         followingList = Array.from(new Set(followingList));
-
-        // Return the followingList as part of the result
         return followingList;
     } catch (error) {
         console.error('Error fetching following list:', error);
-        // Return an empty array or handle the error as needed
-        return [];
+        // Save progress before throwing error
+        await chrome.storage.local.set({
+            lastFetchedUser: start,
+            partialFollowingList: followingList
+        });
+        throw error; // Rethrow the error to be caught by getFollowingListWithRetry
     }
 }
 
-async function getActivityTime(user, apiNode="https://api.steemit.com") {
+
+async function getActivityTime(user, apiNode) {
     try {
-//        console.log(`Checking ${apiNode} for new activity by ${user}`);
-        const response = await fetch(apiNode, {
+        response = await fetch(apiNode, {
+            keepalive: true,
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json'
@@ -266,18 +414,31 @@ async function getActivityTime(user, apiNode="https://api.steemit.com") {
             })
         });
 
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.log(`Error response: ${errorText}`);
+            return null;
+        }
+
         const data = await response.json();
+//        console.log(`Response data: ${JSON.stringify(data, null, 2)}`);
+
         if (data.error) {
-            console.log(`Data error while fetching last post time for ${user}:`, data.error.message);
+            console.warn(`Data error while fetching last post time for ${user}:`, data.error.message);
             return null; // Return null on error
         }
 
+        if (!data.result || !data.result.accounts || data.result.accounts.length === 0) {
+            console.warn(`No accounts found for ${user}`);
+            return null; // No accounts found
+        }
+
         const lastPostTime = data.result.accounts[0].last_post;
-//        console.log(`Last post time for ${user}: ${lastPostTime}`);
         return lastPostTime; // Return last post time
     } catch (error) {
         console.error(`Error fetching last post time for ${user}:`, error);
         return null; // Return null on exception
+    } finally {
     }
 }
 
@@ -297,9 +458,9 @@ async function initializeAlertTime() {
     // Save in chrome.storage.local
     await chrome.storage.local.set({ 'lastAlertTime': lastAlertTime });
     
-    setupAlarms();
     console.log("Done setting up alarms at initialization.");
-    showAlarms();
 }
 
-initializeAlertTime();
+chrome.runtime.onStartup.addListener(() => {
+  setupAlarms();
+});
