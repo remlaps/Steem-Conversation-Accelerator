@@ -86,3 +86,66 @@ async function getIsCheckingActivity() {
         });
     });
 }
+
+async function acquireLock(scriptName, priority, maxStaleTime = 10000, maxWaitTime = 900000) {
+    const startTime = Date.now();
+    
+    async function attemptLock() {
+        const now = Date.now();
+        const result = await chrome.storage.local.get(['processingLock', 'backgroundProgress']);
+        console.log(`${scriptName} is attempting to acquire the lock`);
+        
+        if (!result.processingLock || (now - result.processingLock.timestamp > maxStaleTime) ||
+            (priority > result.processingLock.priority)) {
+            
+            if (result.processingLock && priority > result.processingLock.priority) {
+                console.log(`${scriptName} is preempting ${result.processingLock.scriptName}`);
+                // Reset background.js progress if it's preempted
+                if (result.processingLock.scriptName === 'background') {
+                    await chrome.storage.local.set({ backgroundProgress: 0 });
+                }
+            }
+            
+            await chrome.storage.local.set({
+                processingLock: {
+                    scriptName: scriptName,
+                    timestamp: now,
+                    priority: priority
+                }
+            });
+            return true;
+        }
+        
+        if (now - startTime < maxWaitTime) {
+            await new Promise(resolve => setTimeout(resolve, 15000));
+            return attemptLock();
+        }
+        
+        return false;
+    }
+    
+    return attemptLock();
+}
+
+async function updateLock(scriptName) {
+    const result = await chrome.storage.local.get('processingLock');
+    if (result.processingLock && result.processingLock.scriptName === scriptName) {
+        await chrome.storage.local.set({
+            processingLock: {
+                ...result.processingLock,
+                timestamp: Date.now()
+            }
+        });
+        return true;
+    }
+    return false;
+}
+
+async function releaseLock(scriptName) {
+    const result = await chrome.storage.local.get('processingLock');
+    if (result.processingLock && result.processingLock.scriptName === scriptName) {
+        await chrome.storage.local.remove('processingLock');
+        return true;
+    }
+    return false;
+}

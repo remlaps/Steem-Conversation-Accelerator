@@ -40,15 +40,17 @@ chrome.runtime.onInstalled.addListener(function (details) {
 
 
 chrome.storage.onChanged.addListener((changes, area) => {
-    console.log(`Change: ${changes} observed.`);
+
     function resetAfterChanges() {
         clearAlarms();
         setupAlarms();
     }
-    if (area === 'local' ) {
+
+    if (area === 'local' && ('steemUserName' in changes || 'pollingTime' in changes)) {
+        console.log('Changes observed:', JSON.stringify(changes, null, 2));
         resetAfterChanges();
+        showAlarms();
     }
-    showAlarms();
 });
 
 chrome.idle.onStateChanged.addListener(state => {
@@ -80,15 +82,6 @@ chrome.alarms.onAlarm.addListener((alarm) => {
     }
 });
 
-// Probably unneeded.  Doesn't seem to be in use.
-//chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-//    if (message.type === 'GET_USERNAME') {
-//        chrome.storage.local.get(['steemUsername'], (result) => {
-//            sendResponse(result.steemUsername);
-//        });
-//        return true; // Will respond asynchronously
-//    }
-//});
 
 /***
  * 
@@ -186,136 +179,160 @@ let accountsWithNewActivity = []; // must be global to pass to activityList.
 let savedAccountList = [];
 
 let isCheckingActivity = false;
-
+saveIsCheckingActivity(isCheckingActivity);
 async function checkForNewActivitySinceLastNotification(steemUsername) {
-    try {
-        let isCheckingActivity = await getIsCheckingActivity();
-        if (isCheckingActivity) {
-            console.log('checkForNewActivitySinceLastNotification is already running.');
-            return;
-        }
-        isCheckingActivity = true;
-        await saveIsCheckingActivity(isCheckingActivity);
+    let isCheckingActivity = await getIsCheckingActivity();
+    if (isCheckingActivity) {
+        console.log('checkForNewActivitySinceLastNotification is already running.');
+        return;
+    }
+    isCheckingActivity = true;
+    await saveIsCheckingActivity(isCheckingActivity);
+    if (await acquireLock('background', 1)) { // Lower priority
+        console.log(`array lock set in checkForNewActivitySinceLastNotification ${steemUsername}.`);
+        try {
 
-        // Retrieve stored progress
-        let { lastAlertTime, lastNotificationTime, accountsWithNewActivity, lastCheckedIndex } = 
-            await chrome.storage.local.get(['lastAlertTime', 'lastNotificationTime', 'accountsWithNewActivity', 'lastCheckedIndex']);
 
-        const currentCheckTime = new Date().toISOString();
-        const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-        if ( ! lastNotificationTime ) {
-            await chrome.storage.local.set({lastNotificationTime: fifteenMinutesAgo});
-        }
+            // Retrieve stored progress
+            let {lastAlertTime, lastNotificationTime, accountsWithNewActivity, lastCheckedIndex} =
+                    await chrome.storage.local.get(['lastAlertTime', 'lastNotificationTime', 'accountsWithNewActivity', 'lastCheckedIndex']);
 
-        // Initialize lastAlertTime if it doesn't exist
-        lastAlertTime = lastAlertTime || fifteenMinutesAgo;
+            const currentCheckTime = new Date().toISOString();
+            const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+            if (!lastNotificationTime) {
+                await chrome.storage.local.set({lastNotificationTime: fifteenMinutesAgo});
+            }
 
-        // Initialize lastNotificationTime if it doesn't exist
-        lastNotificationTime = lastNotificationTime || lastAlertTime;
+            // Initialize lastAlertTime if it doesn't exist
+            lastAlertTime = lastAlertTime || fifteenMinutesAgo;
 
-        // Use the more recent of lastNotificationTime and fifteenMinutesAgo as the start time for checking
-        const checkStartTime = new Date(Math.max(new Date(lastNotificationTime), new Date(fifteenMinutesAgo))).toISOString();
+            // Initialize lastNotificationTime if it doesn't exist
+            lastNotificationTime = lastNotificationTime || lastAlertTime;
 
-        console.log(`Last alert time: ${lastAlertTime}`);
-        console.log(`Last notification time: ${lastNotificationTime}`);
-        console.log(`Check start time: ${checkStartTime}`);
+            // Use the more recent of lastNotificationTime and fifteenMinutesAgo as the start time for checking
+            const checkStartTime = new Date(Math.max(new Date(lastNotificationTime), new Date(fifteenMinutesAgo))).toISOString();
 
-        accountsWithNewActivity = JSON.parse(accountsWithNewActivity || '[]');
-        lastCheckedIndex = lastCheckedIndex || 0;
+            console.log(`Last alert time: ${lastAlertTime}`);
+            console.log(`Last notification time: ${lastNotificationTime}`);
+            console.log(`Check start time: ${checkStartTime}`);
 
-        console.log(`Resuming check from index ${lastCheckedIndex}`);
+            accountsWithNewActivity = JSON.parse(accountsWithNewActivity || '[]');
+            lastCheckedIndex = lastCheckedIndex || 0;
 
-        let newActivityFound = accountsWithNewActivity.length > 0;
-        steemUsername = await getStoredUser();
-        apiNode = await getApiServerName();
-        const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
+            console.log(`Resuming check from index ${lastCheckedIndex}`);
 
-        for (let i = lastCheckedIndex; i < followingList.length; i++) {
-            const followedAccount = followingList[i];
-            try {
-                const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode);
-                if (currentActivityTime === null) {
-                    console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
+            let newActivityFound = accountsWithNewActivity.length > 0;
+            steemUsername = await getStoredUser();
+            apiNode = await getApiServerName();
+            const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
+
+            for (let i = lastCheckedIndex; i < followingList.length; i++) {
+                const followedAccount = followingList[i];
+                try {
+                    const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode);
+                    if (currentActivityTime === null) {
+                        console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
+                        continue;
+                    }
+                    const cT = new Date(`${currentActivityTime}Z`);
+                    const sT = new Date(checkStartTime);
+                    if (sT < cT) {
+                        newActivityFound = true;
+                        if (!accountsWithNewActivity.includes(followedAccount)) {
+                            accountsWithNewActivity.push({
+                                account: followedAccount,
+                                activityTime: currentActivityTime,
+                                lastDisplayTime: currentActivityTime
+                            });
+                        } else {
+                            console.debug("This should not happen(?).");
+                        }
+                    } else {
+                        // nothing to do right now.
+                    }
+
+                    // Save progress every 10 accounts checked
+                    if (i % 10 === 0) {
+                        if (!(await updateLock('background'))) {
+                            console.log('Lost lock during processing in background.js');
+                            isCheckingActivity = false;
+                            await saveIsCheckingActivity(isCheckingActivity);
+                            return;
+                        }
+                        await chrome.storage.local.set({
+                            lastCheckedIndex: i,
+                            accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
+                        });
+                        console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime}.`);
+                    }
+
+                    // Add a small delay to avoid overwhelming the API
+                    await new Promise(resolve => setTimeout(resolve, 100));
+
+                } catch (error) {
+                    console.error(`Error checking activity for ${followedAccount}:`, error);
                     continue;
                 }
-                const cT = new Date(`${currentActivityTime}Z`);
-                const sT = new Date(checkStartTime);
-                if (sT < cT) {
-                    newActivityFound = true;
-                    if (!accountsWithNewActivity.includes(followedAccount)) {
-                        accountsWithNewActivity.push(followedAccount);
-                    }
-                } else {
-                    // nothing to do right now.
-                }
-
-                // Save progress every 10 accounts checked
-                if (i % 10 === 0) {
-                    await chrome.storage.local.set({
-                        lastCheckedIndex: i,
-                        accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
-                    });
-                    console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime}.`);
-                }
-
-                // Add a small delay to avoid overwhelming the API
-                await new Promise(resolve => setTimeout(resolve, 100));
-
-            } catch (error) {
-                console.error(`Error checking activity for ${followedAccount}:`, error);
             }
-        }
 
-        console.log("Done checking activity times.");
-        console.log(`newActivityFound: ${newActivityFound}`);
-        console.log(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
+            console.log("Done checking activity times.");
+            console.log(`newActivityFound: ${newActivityFound}`);
+            console.log(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
 
-        if (newActivityFound) {
-            const size = accountsWithNewActivity.length;
-            console.log(`Number of accounts with new activity: ${size}`);
-            const notificationMessage = `${size} new post(s) or comment(s) were observed from your followed account(s)!`;
-            await chrome.storage.local.set({ 
-                accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
-                currentCheckTime: currentCheckTime
+            if (newActivityFound) {
+                const size = accountsWithNewActivity.length;
+                console.log(`Number of accounts with new activity: ${size}`);
+                const notificationMessage = `${size} new post(s) or comment(s) were observed from your followed account(s)!`;
+                await chrome.storage.local.set({
+                    accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
+                    currentCheckTime: currentCheckTime
+                });
+                try {
+                    await displayBrowserNotification(notificationMessage);
+                    console.log("Browser notification displayed successfully.");
+                } catch (error) {
+                    console.error("Error displaying browser notification:", error);
+                }
+            } else {
+                console.log("No new activity found, skipping notification.");
+            }
+
+            // Update lastAlertTime
+            await chrome.storage.local.set({
+                'lastAlertTime': currentCheckTime,
+                'lastCheckedIndex': 0
             });
-            try {
-                await displayBrowserNotification(notificationMessage);
-                console.log("Browser notification displayed successfully.");
-            } catch (error) {
-                console.error("Error displaying browser notification:", error);
-            }
-        } else {
-            console.log("No new activity found, skipping notification.");
+
+        } catch (error) {
+            console.error('Error checking for new activity since last alert:', error);
+        } finally {
+            await releaseLock();
+            console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemUsername}.`);
         }
-
-        // Update lastAlertTime
-        await chrome.storage.local.set({
-            'lastAlertTime': currentCheckTime,
-            'lastCheckedIndex': 0
-        });
-
-    } catch (error) {
-        console.error('Error checking for new activity since last alert:', error);
-    } finally {
-        isCheckingActivity = false;
-        await saveIsCheckingActivity(isCheckingActivity);
+    } else {
+        console.log('Could not acquire lock in background.js, will try again later');
     }
+    isCheckingActivity = false;
+    await saveIsCheckingActivity(isCheckingActivity);
 }
-
-let lastNotificationId = null;
+    
 async function displayBrowserNotification(message) {
   console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
   
-  // Clear the old notification if it exists
-  if (lastNotificationId !== null) {
-    chrome.notifications.clear(lastNotificationId, function(wasCleared) {
-      if (wasCleared) {
-        console.log("Previous notification cleared.");
-      } else {
-        console.log("No previous notification to clear.");
-      }
+    // Clear all notifications created by this extension
+    await chrome.notifications.getAll(function (notifications) {
+        for (let notificationId in notifications) {
+            if (notifications.hasOwnProperty(notificationId)) {
+                chrome.notifications.clear(notificationId, function (wasCleared) {
+                    if (wasCleared) {
+                        console.log(`Notification ${notificationId} cleared.`);
+                    } else {
+                        console.log(`Notification ${notificationId} could not be cleared.`);
+                    }
+                });
+            }
+        }
     });
-  }
 
   // Create a new notification
   chrome.notifications.create({
@@ -323,9 +340,6 @@ async function displayBrowserNotification(message) {
     iconUrl: 'SCAicon.png',
     title: 'Steem Activity Alert',
     message: message
-  }, function(notificationId) {
-    // Store the new notification ID
-    lastNotificationId = notificationId;
   });
 }
 
