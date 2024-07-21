@@ -346,7 +346,14 @@ async function displayBrowserNotification(message) {
 // Handle notification click
 chrome.notifications.onClicked.addListener(() => {
     // Open activityList.html with accountsWithNewActivity data
-    chrome.tabs.create({url: chrome.runtime.getURL('activityList.html')});
+    chrome.tabs.create({url: chrome.runtime.getURL('activityList.html')});  // Open in tab
+
+//    chrome.windows.create({                                                   // Open in new window
+//        url: chrome.runtime.getURL('activityList.html'),
+//        type: 'popup',
+//        width: 600,
+//        height: 800
+//    });
     savedAccountList = [];
 });
 
