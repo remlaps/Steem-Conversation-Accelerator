@@ -34,12 +34,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // If this account hasn't been seen before, initialize it
                     acc[item.account] = {
                         account: item.account,
-                        oldestActivityTime: item.activityTime,
+                        newestActivityTime: item.activityTime,
                         newestDisplayTime: item.lastDisplayTime
                     };
                 } else {
                     // If we've seen this account before, update the times if necessary
-                    acc[item.account].oldestActivityTime = Math.min(acc[item.account].oldestActivityTime, item.activityTime);
+                    acc[item.account].newestActivityTime = Math.min(acc[item.account].newestActivityTime, item.activityTime);
                     acc[item.account].newestDisplayTime = Math.max(acc[item.account].newestDisplayTime, item.lastDisplayTime);
                 }
                 return acc;
@@ -62,7 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     for (const accountTriplet of uniqueAccountsWithNewActivity) {
                         console.log(`Account: ${accountTriplet.account}`);
-                        console.log(`Oldest Activity Time: ${new Date(accountTriplet.oldestActivityTime).toLocaleString()}`);
+                        console.log(`Oldest Activity Time: ${new Date(accountTriplet.newestActivityTime).toLocaleString()}`);
                         console.log(`Newest Display Time: ${new Date(accountTriplet.newestDisplayTime).toLocaleString()}`);
                         console.log('-------------------');
     
@@ -269,10 +269,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             await updateAccountsList();
 
-            // Clear the stored account array and save the previousAlertTime to chrome.storage.local
+            // Save the stored account array and save the previousAlertTime to chrome.storage.local
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
                     .then(() => {
-                        console.log("Accounts with new activity successfully cleared!");
+                        console.log("Accounts with new activity successfully saved!");
                     })
                     .catch(error => {
                         console.error("Error clearing accounts:", error);
@@ -472,6 +472,7 @@ async function getRootInfo(author, permlink, apiEndpoint) {
 }
 
 function deleteTriplet(accounts, accountToDelete ) {
+    console.debug(`Deleting ${accountToDelete} from saved accounts.`);
     return accounts.filter(item => 
         !(item.account === accountToDelete)
     );

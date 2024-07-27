@@ -357,7 +357,7 @@ chrome.notifications.onClicked.addListener(() => {
     savedAccountList = [];
 });
 
-async function getFollowingList(steemUsername, apiNode, limit = 100) {
+async function getFollowingList(steemUsername, apiNode, limit = 1000) {
     let followingList = [];
     let start = '';
 
@@ -379,7 +379,7 @@ async function getFollowingList(steemUsername, apiNode, limit = 100) {
                 },
                 body: JSON.stringify({
                     jsonrpc: '2.0',
-                    method: 'follow_api.get_following',
+                    method: 'condenser_api.get_following',
                     params: [steemUsername, start, 'blog', limit],
                     id: 1
                 })
@@ -415,8 +415,78 @@ async function getFollowingList(steemUsername, apiNode, limit = 100) {
     }
 }
 
-
 async function getActivityTime(user, apiNode) {
+    try {
+        let lastTransaction = -1;
+        let transactionCount = 0;
+        const currentTime = new Date();
+
+        while (true) {
+            const postData = JSON.stringify({
+                jsonrpc: '2.0',
+                method: 'condenser_api.get_account_history',
+                params: [user, lastTransaction, transactionCount],
+                id: 1
+            });
+
+            const response = await fetch(apiNode, {
+                keepalive: true,
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: postData
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`Response not OK when Fetching data for ${user}: ${errorText}`);
+                return null;
+            }
+
+            const data = await response.json();
+            if (data.error) {
+                console.error(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
+                return null;
+            }
+
+            if (!data.result || data.result.length < 1 || data.result[0].length < 2 || data.result[0][1].timestamp.length === 0) {
+                console.log(`No recent activity found for ${user}`);
+                return null;
+            }
+
+            const timestamp = data.result[0][1].timestamp;
+            let transId = data.result[0][0];
+            let opType = data.result[0][1].op[0];
+//            console.log(`transaction: ${transId}, operation: ${opType}, timestamp: ${timestamp}`);
+
+            // Check if the operation is a comment
+            if (opType === 'comment') {
+                return timestamp;
+            }
+
+            // Check if the transaction is more than 1 hour old
+            const transactionTime = new Date(timestamp);
+            if ((currentTime - transactionTime) > 3600000) { // 3600000 milliseconds = 1 hour
+//                console.log(`No comment found within the last hour for ${user}`);
+                return "1970-01-01T00:00:00";
+            }
+
+            // Decrement the transaction ID for the next iteration
+            lastTransaction = transId -1;
+        }
+    } catch (error) {
+        console.error(`Error fetching last post time for ${user}:`, error);
+        return null;
+    }
+}
+
+/*
+ * Replacing with get_account_history call
+ * 
+ */
+
+async function getLastPost(user, apiNode) {
     try {
         response = await fetch(apiNode, {
             keepalive: true,
@@ -464,6 +534,7 @@ async function getActivityTime(user, apiNode) {
     }
 }
 
+
 async function updateActivityTimes(followingList, lastActivityTimes) {
     for (let follower of followingList) {
         const history = await steem.api.getAccountHistoryAsync(follower, -1, 1);
@@ -475,7 +546,8 @@ async function updateActivityTimes(followingList, lastActivityTimes) {
 
 async function initializeAlertTime() {
     const now = new Date();
-    const lastAlertTime = now.toISOString(); // Initialize with current UTC date and time if not previously set
+    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
+    const lastAlertTime = fifteenMinutesAgo.toISOString(); // Initialize with current UTC date and time if not previously set
     
     // Save in chrome.storage.local
     await chrome.storage.local.set({ 'lastAlertTime': lastAlertTime });
