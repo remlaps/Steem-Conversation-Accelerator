@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     await chrome.storage.local.get(['accountsWithNewActivity', 'lastNotificationTime', 'steemUsername']);
             const currentCheckTime = new Date().toISOString();
             const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
-//            const steemFollowedActiveAccounts = accountsFromBackground.map(item => item.account);
 
             // Update HTML content with the previous notification time
             const previousNotificationTime = lastNotificationTime || 'Not available';
@@ -27,54 +26,62 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
             // Remove duplicates using a Set and convert back to an Array
-//            const uniqueAccountsWithNewActivity = [...new Set(steemFollowedActiveAccounts)];
-            accountsWithNewActivity = JSON.parse(accountsWithNewActivity);
-            let uniqueAccountsWithNewActivity = Object.values(accountsWithNewActivity.reduce((acc, item) => {
-                if (!acc[item.account]) {
+            console.log(`accountsWithNewAcitivty before splitting: ${accountsWithNewActivity}`);
+            accountsWithNewActivity = JSON.parse(accountsWithNewActivity);   // Convert JSON string to array
+            let uniqueAccountsWithNewActivity = Object.values(accountsWithNewActivity.reduce((activityRecord, item) => {
+                if (!activityRecord[item.account]) {
                     // If this account hasn't been seen before, initialize it
-                    acc[item.account] = {
+                    activityRecord[item.account] = {
                         account: item.account,
-                        newestActivityTime: item.activityTime,
-                        newestDisplayTime: item.lastDisplayTime
+                        activityTime: item.activityTime,
+                        lastDisplayTime: item.lastDisplayTime
                     };
                 } else {
                     // If we've seen this account before, update the times if necessary
-                    acc[item.account].newestActivityTime = Math.min(acc[item.account].newestActivityTime, item.activityTime);
-                    acc[item.account].newestDisplayTime = Math.max(acc[item.account].newestDisplayTime, item.lastDisplayTime);
+                    activityRecord[item.account].activityTime =
+                            newerDate(activityRecord[item.account].activityTime, item.activityTime);
+                    activityRecord[item.account].newestDisplayTime =
+                            newerDate(activityRecord[item.account].lastDisplayTime, item.lastDisplayTime);
                 }
-                return acc;
+                return activityRecord;
             }, {}));
             const listSize = uniqueAccountsWithNewActivity.length;
-            const listValues = uniqueAccountsWithNewActivity.join(', ');
+//            const listValues = uniqueAccountsWithNewActivity.join(', ');
 
             const accountsList = document.getElementById('accountsList');
             async function updateAccountsList() {
-
-                //
-                // Duplicate accounts that accumulated over multiple iterations must be eliminated
-                //
                 if (uniqueAccountsWithNewActivity.length === 0) {
+                    /*
+                     * activity list is empty.  Update HTML
+                     */
                     const listItem = document.createElement('li');
                     listItem.textContent = 'No new activity detected.';
                     accountsList.appendChild(listItem);
                 } else {
+                    /*
+                     * Some activity was observed.  Show it in HTML.
+                     */
                     const apiEndpoint = await getApiServerName();
 
                     for (const accountTriplet of uniqueAccountsWithNewActivity) {
                         console.log(`Account: ${accountTriplet.account}`);
-                        console.log(`Oldest Activity Time: ${new Date(accountTriplet.newestActivityTime).toLocaleString()}`);
-                        console.log(`Newest Display Time: ${new Date(accountTriplet.newestDisplayTime).toLocaleString()}`);
+                        console.log(`Newest Activity Time: ${new Date(accountTriplet.activityTime).toString()}`);
+                        console.log(`Newest Display Time: ${new Date(accountTriplet.lastDisplayTime).toString()}`);
                         console.log('-------------------');
+                        console.log ("Before checks: ");
+                        showTriplet(accountTriplet);
     
                         await updateLock("activityList");
                         const listItem = document.createElement('li');
                         const webServerName = await getWebServerName();
                         const account = accountTriplet.account;
+                        const lastActivityTime = accountTriplet.activityTime;
+                        const lastDisplayTime = accountTriplet.lastDisplayTime;
                         const accountURL = `${webServerName}/@${account}`;
 
                         try {
                             console.log(`account: ${account}, startTime: ${previousNotificationTime}, api Endpoint: ${apiEndpoint} - before getAccountActivities`);
-                            const {postList, commentList, replyList} = await getAccountActivities(account, previousNotificationTime, apiEndpoint);
+                            const {postList, commentList, replyList} = await getAccountActivities(account, lastDisplayTime, apiEndpoint);
 
                             // Create the HTML content for the account
                             let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
@@ -94,8 +101,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             postTime = post[1].timestamp || "Post time is empty";
 
                                             console.log("Post data:", {postTime, author, title, permlink, body: body.substring(0, 50) + "..."}); // Log truncated body for brevity
-                                            console.dir(postData);
-                                            console.dir(post);
                                         } else {
                                             console.warn("Unexpected post structure:", post);
                                             author = "Unknown";
@@ -158,8 +163,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             root_title = "root_title missing";
                                         }
                                         console.log("Comment data:", {commentTime, author, permlink, body: body.substring(0, 50) + "..."}); // Log truncated body for brevity
-                                        console.dir(commentData);
-                                        console.dir(comment);
                                     } else {
                                         console.warn(`Unexpected comment structure:", ${JSON.stringify(comment)}`);
                                     }
@@ -224,8 +227,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                                             root_title = "root_title missing";
                                         }
                                         console.log("Reply data:", {replyTime, author, permlink, body: body.substring(0, 50) + "..."});
-                                        console.dir(replyData);
-                                        console.dir(reply);
                                     } else {
                                         console.warn(`Unexpected reply structure:", ${JSON.stringify(comment)}`);
                                     }
@@ -262,7 +263,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                         }
 
                         accountsList.appendChild(listItem);
-                        uniqueAccountsWithNewActivity = deleteTriplet ( uniqueAccountsWithNewActivity, account );
+                        const uniqueAccountIndex = uniqueAccountsWithNewActivity.findIndex(item => item.account === account);
+                        if ( uniqueAccountIndex === -1 ) {
+                            // account not found in the list
+                            // this should never happen
+                        } else {
+                            accountTriplet.lastDisplayTime = lastActivityTime;
+                            uniqueAccountsWithNewActivity[uniqueAccountIndex] = accountTriplet;
+                        }
+                        console.log ("After checks: ");
+                        showTriplet(accountTriplet);
                     }
                 }
             }
@@ -329,7 +339,6 @@ function convertToPlainText(html) {
 async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewAcitivity) {
     return new Promise((resolve, reject) => {
         console.log("Inside: saveStoredAccountsWithNewActivity");
-        console.dir(JSON.stringify(uniqueAccountsWithNewAcitivity));
         chrome.storage.local.set({'accountsWithNewActivity': JSON.stringify(uniqueAccountsWithNewAcitivity)}, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
@@ -341,8 +350,7 @@ async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewAcitivity)
 }
 
 async function getAccountActivities(account, startTime, apiEndpoint) {
-    const startTimeStamp = new Date(startTime).getTime();
-
+    const startTimeStamp = new Date(startTime +"Z").getTime();
     let allActivities = [];  // Initialize an empty array to store activities
     let postList = [];    // Initialize list of posts
     let commentList = []; // Initialize list of comments
@@ -390,10 +398,11 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
     let transactionIndex = lastActivity.result[0][0];
     let transactionTime = lastActivity.result[0][1].timestamp;
     let transactionTimeStamp = new Date(transactionTime + 'Z').getTime();
-    console.log(`start time: ${startTime}, transaction time stamp: ${transactionTime}`);
-    console.log(`start time stamp: ${startTimeStamp}, transaction time: ${transactionTimeStamp}`);
+    console.log(`Before loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+    console.log(`Before loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
 
-    while (startTimeStamp < transactionTimeStamp) {
+//    while (new Date ( startTime ) < new Date (transactionTime) ) {
+    while ( startTimeStamp < transactionTimeStamp ) {
         console.log(`looking for transactions in ${account} account  history.`);
         if (!lastActivity.result) {
             console.log(`downloading transaction failed for ${account}.  Skipping.`);
@@ -402,32 +411,29 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
         lastActivity.result.forEach(activity => {
             allActivities.push(activity);  // Add the entire activity object to the array
 
-            if (startTimeStamp < transactionTimeStamp) {
+//            if (startTimeStamp < transactionTimeStamp) {
                 let steemOp = activity[1]?.op?.[0];
                 console.log(`Steem operation: ${steemOp}`);
                 if (steemOp === "comment") {
                     let parentAuthor = activity[1].op[1].parent_author;
                     if (!parentAuthor) {
                         postList.push(activity);
-                        console.dir(activity);
                     } else {
                         let author = activity[1].op[1].author;
                         if (author === account) {
                             commentList.push(activity);
-                        console.dir(activity);
                         } else {
                             replyList.push(activity);
-                        console.dir(activity);
                         }
                     }
                 }
                 console.log("Processed");
-            }
+//            }
         });
 
         console.log(`Transaction index: ${transactionIndex}`);
-        console.log(`start time: ${startTime}, transaction time: ${transactionTime}`);
-        console.log(`start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+        console.log(`In loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+        console.log(`In loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
         transactionIndex--;
         lastActivity = await FetchAccountHistoryWithRetry(account, transactionIndex, apiEndpoint);
 //        console.log(JSON.stringify(lastActivity, null, 2));
@@ -471,9 +477,19 @@ async function getRootInfo(author, permlink, apiEndpoint) {
   }
 }
 
+function newerDate(date1, date2) {
+    return new Date(date1) > new Date(date2) ? date1 : date2;
+}
+
 function deleteTriplet(accounts, accountToDelete ) {
     console.debug(`Deleting ${accountToDelete} from saved accounts.`);
     return accounts.filter(item => 
         !(item.account === accountToDelete)
     );
+}
+
+function showTriplet ( showAccount ) {
+    console.log (`Steem account: ${showAccount.account}`);
+    console.log (`Last activity: ${showAccount.activityTime}`);
+    console.log (`Last display: ${showAccount.lastDisplayTime}`);
 }

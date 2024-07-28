@@ -130,16 +130,16 @@ function showAlarms() {
     });
 }
 
-async function getActivityTimeWithRetry(followedAccount, apiNode, retries = 3) {
+async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 3) {
     try {
-        const currentActivityTime = await getActivityTime(followedAccount, apiNode);
+        const currentActivityTime = await getActivityTime(followedAccount, apiNode, startTime);
         if (currentActivityTime !== null) {
             return currentActivityTime;
         } else {
             console.warn(`Failed to get activity time for ${followedAccount}. Retrying in 1 second... (${retries} retries left)`);
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
             if (retries > 0) {
-                return getActivityTimeWithRetry(followedAccount, apiNode, retries - 1);
+                return getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries - 1);
             } else {
                 console.error(`Failed to get activity time for ${followedAccount} after maximum retries.`);
                 return null;
@@ -150,7 +150,7 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, retries = 3) {
         if (retries > 0) {
             console.warn(`Retrying getActivityTimeWithRetry for ${followedAccount} in 1 second... (${retries} retries left)`);
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
-            return getActivityTimeWithRetry(followedAccount, apiNode, retries - 1);
+            return getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries - 1);
         } else {
             console.error(`Failed to get activity time for ${followedAccount} after maximum retries due to error.`);
             return null;
@@ -229,23 +229,39 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
                 try {
-                    const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode);
+                    let sT=new Date(checkStartTime);
+                    const existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
+                    if (existingAccountIndex !== -1) {
+                        sT=new Date(accountsWithNewActivity[existingAccountIndex].lastDisplayTime);
+                    }
+
+                    const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode, sT );
                     if (currentActivityTime === null) {
                         console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
                         continue;
                     }
                     const cT = new Date(`${currentActivityTime}Z`);
-                    const sT = new Date(checkStartTime);
+
+
                     if (sT < cT) {
                         newActivityFound = true;
-                        if (!accountsWithNewActivity.includes(followedAccount)) {
-                            accountsWithNewActivity.push({
+                        // First, check if the account already exists in accountsWithNewActivity
+                        if (existingAccountIndex === -1) {
+                            // The account doesn't exist in the array yet
+                            const currentActivityTimeDate = new Date(currentActivityTime);
+                            const oneSecondBefore = new Date(currentActivityTimeDate.getTime() - 1000);
+                            const newActivity = {
                                 account: followedAccount,
                                 activityTime: currentActivityTime,
-                                lastDisplayTime: currentActivityTime
-                            });
+                                lastDisplayTime: oneSecondBefore.toISOString() // or whatever format you prefer
+                            };
+                            accountsWithNewActivity.push(newActivity);
                         } else {
-                            console.debug("This should not happen(?).");
+                            // The account already exists, update its activityTime and keep the existing lastDisplayTime
+                            const existingAccount = accountsWithNewActivity[existingAccountIndex];
+                            existingAccount.activityTime = currentActivityTime;
+                            accountsWithNewActivity[existingAccountIndex] = existingAccount;
+                            // lastDisplayTime remains unchanged
                         }
                     } else {
                         // nothing to do right now.
@@ -415,11 +431,12 @@ async function getFollowingList(steemUsername, apiNode, limit = 1000) {
     }
 }
 
-async function getActivityTime(user, apiNode) {
+async function getActivityTime(user, apiNode, startTime) {
+//    console.log(`Getting account history for ${user} from ${startTime} until now.`);
     try {
         let lastTransaction = -1;
         let transactionCount = 0;
-        const currentTime = new Date();
+        const currentTime = new Date().toUTCString();
 
         while (true) {
             const postData = JSON.stringify({
@@ -429,6 +446,7 @@ async function getActivityTime(user, apiNode) {
                 id: 1
             });
 
+            loopTime=new Date();
             const response = await fetch(apiNode, {
                 keepalive: true,
                 method: 'POST',
@@ -458,6 +476,7 @@ async function getActivityTime(user, apiNode) {
             const timestamp = data.result[0][1].timestamp;
             let transId = data.result[0][0];
             let opType = data.result[0][1].op[0];
+//            console.log(`looping: ${loopTime}, startTime: ${startTime}`);
 //            console.log(`transaction: ${transId}, operation: ${opType}, timestamp: ${timestamp}`);
 
             // Check if the operation is a comment
@@ -465,10 +484,9 @@ async function getActivityTime(user, apiNode) {
                 return timestamp;
             }
 
-            // Check if the transaction is more than 1 hour old
-            const transactionTime = new Date(timestamp);
-            if ((currentTime - transactionTime) > 3600000) { // 3600000 milliseconds = 1 hour
-//                console.log(`No comment found within the last hour for ${user}`);
+            // Check if the transaction was before startTime.
+            const transactionTime = new Date(timestamp).toUTCString();
+            if ( newerDate ( startTime, transactionTime )) { 
                 return "1970-01-01T00:00:00";
             }
 
@@ -479,6 +497,10 @@ async function getActivityTime(user, apiNode) {
         console.error(`Error fetching last post time for ${user}:`, error);
         return null;
     }
+}
+
+function newerDate(date1, date2) {
+    return new Date(date1) > new Date(date2) ? date1 : date2;
 }
 
 /*
@@ -534,15 +556,17 @@ async function getLastPost(user, apiNode) {
     }
 }
 
-
-async function updateActivityTimes(followingList, lastActivityTimes) {
-    for (let follower of followingList) {
-        const history = await steem.api.getAccountHistoryAsync(follower, -1, 1);
-        if (history.length) {
-            lastActivityTimes[follower] = history[0][1].timestamp;
-        }
-    }
-}
+/*
+ * Not in use(?)
+ */
+//async function updateActivityTimes(followingList, lastActivityTimes) {
+//    for (let follower of followingList) {
+//        const history = await steem.api.getAccountHistoryAsync(follower, -1, 1);
+//        if (history.length) {
+//            lastActivityTimes[follower] = history[0][1].timestamp;
+//        }
+//    }
+//}
 
 async function initializeAlertTime() {
     const now = new Date();
