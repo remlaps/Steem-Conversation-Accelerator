@@ -11,17 +11,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             // Update HTML content with the previous notification time
             const previousNotificationTime = lastNotificationTime || 'Not available';
-            
+
             const previousAlertTimeField = document.getElementById("previous-alert-time");
             if (previousAlertTimeField) {
                 previousAlertTimeField.textContent = lastNotificationTime;
             }
-            
+
             const steemUsernameField = document.getElementById("steemUsername");
             if (steemUsernameField) {
                 steemUsernameField.textContent = steemUsername;
             }
-            
+
             console.log(`Processing activity for ${steemUsername} after: ${lastNotificationTime}`);
 
 
@@ -49,6 +49,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 //            const listValues = uniqueAccountsWithNewActivity.join(', ');
 
             const accountsList = document.getElementById('accountsList');
+
+            /*
+             // updateAccountsList() function is declared inside the document.addEventListener() context
+             */
             async function updateAccountsList() {
                 if (uniqueAccountsWithNewActivity.length === 0) {
                     /*
@@ -68,9 +72,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         console.log(`Newest Activity Time: ${new Date(accountTriplet.activityTime).toString()}`);
                         console.log(`Newest Display Time: ${new Date(accountTriplet.lastDisplayTime).toString()}`);
                         console.log('-------------------');
-                        console.log ("Before checks: ");
+                        console.log("Before checks: ");
                         showTriplet(accountTriplet);
-    
+
                         await updateLock("activityList");
                         const listItem = document.createElement('li');
                         const webServerName = await getWebServerName();
@@ -124,7 +128,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 content += `</ul>`;
                                 content += `</div>`;  // End of indented content
                             } else {
-                                content += `<strong>Posts:</strong><p>No posts found.</p>`;
+                                content += `<strong>Posts:</strong><br><br>`;
                                 content += `<div class="indented-content"><p>No posts found.</p></div>`;
                             }
 
@@ -176,20 +180,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                                     // All comments should have roots
                                     content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
-                                    
+
                                     // Check if parent and root links are different before adding parent
                                     if (parent_author !== root_author || parent_permlink !== root_permlink) {
                                         content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
                                     }
 
-                                    content += `<strong>Comment link:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
+                                                                        content += `<strong>Comment link:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
                                     content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
                                     content += `</li>`;
-                                };
+                                }
+                                ;
                                 content += `</ul>`;
                                 content += `</div>`;  // End of indented content
                             } else {
-                                content += `<div class="indented-content"><strong>Comments:</strong><p>No comments found.</p></div>`;
+                                content += `<strong>Comments:</strong><br><br>`;
+                                content += `<div class="indented-content"><p>No comments found.</p></div>`;
                             }
 
                             content += `<br><br>`; // Add some spacing between sections
@@ -240,20 +246,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                                     // All replies should have roots
                                     content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
-                                    
+
                                     // Check if parent and root links are different before adding parent
                                     if (parent_author !== root_author || parent_permlink !== root_permlink) {
                                         content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
                                     }
 
-                                    content += `<strong>Reply link:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${webServerName}/@${author}/${permlink}</a><br>`;
+                                                                        content += `<strong>Reply link:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${webServerName}/@${author}/${permlink}</a><br>`;
                                     content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
                                     content += `</li>`;
-                                };
+                                }
+                                ;
                                 content += `</ul>`;
                                 content += `</div>`;  // End of indented content
                             } else {
-                                content += `<div class="indented-content"><strong>Replies:</strong><p>No replies found.</p></div>`;
+                                content += `<strong>Replies:</strong><br><br>`;
+                                content += `<div class="indented-content"><p>No replies found.</p></div>`;
                             }
                             listItem.innerHTML = content;
                         } catch (error) {
@@ -264,19 +272,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                         accountsList.appendChild(listItem);
                         const uniqueAccountIndex = uniqueAccountsWithNewActivity.findIndex(item => item.account === account);
-                        if ( uniqueAccountIndex === -1 ) {
+                        if (uniqueAccountIndex === -1) {
                             // account not found in the list
                             // this should never happen
                         } else {
                             accountTriplet.lastDisplayTime = lastActivityTime;
                             uniqueAccountsWithNewActivity[uniqueAccountIndex] = accountTriplet;
                         }
-                        console.log ("After checks: ");
+                        console.log("After checks: ");
                         showTriplet(accountTriplet);
                     }
                 }
             }
-
             await updateAccountsList();
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
@@ -298,7 +305,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         console.log(`Could not get array lock in activityList.`);
     }
+    // After all data is loaded and the page is populated, change the background color
+    document.body.style.backgroundColor = getComputedStyle(document.documentElement)
+            .getPropertyValue('--altBgColor').trim();
 });
+
 
 // Function to retrieve stored accountsWithNewActivity from chrome.storage.local
 async function getStoredAccountsWithNewActivity() {
@@ -314,26 +325,26 @@ async function getStoredAccountsWithNewActivity() {
 }
 
 function convertToPlainText(html) {
-  // Create a temporary DOM element
-  const temp = document.createElement('div');
-  
-  // Set the HTML content
-  temp.innerHTML = html;
-  
-  // Get the text content
-  let text = temp.textContent || temp.innerText || '';
-  
+    // Create a temporary DOM element
+    const temp = document.createElement('div');
+
+    // Set the HTML content
+    temp.innerHTML = html;
+
+    // Get the text content
+    let text = temp.textContent || temp.innerText || '';
+
     // Remove markdown image syntax
-  text = text.replace(/\[!\[.*?\]\(.*?\)\]/g, '');  // Remove nested image markdown
-  text = text.replace(/!\[.*?\]\(.*?\)/g, '');      // Remove regular image markdown
-  
-  // Remove markdown link syntax
-  text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-  
-  // Remove other common markdown syntax
-  text = text.replace(/[#*_~`]/g, '');
-  
-  return text.trim();
+    text = text.replace(/\[!\[.*?\]\(.*?\)\]/g, '');  // Remove nested image markdown
+    text = text.replace(/!\[.*?\]\(.*?\)/g, '');      // Remove regular image markdown
+
+    // Remove markdown link syntax
+    text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+
+    // Remove other common markdown syntax
+    text = text.replace(/[#*_~`]/g, '');
+
+    return text.trim();
 }
 
 // Function to clear stored accountsWithNewActivity in chrome.storage.local
@@ -402,7 +413,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
     console.log(`Before loop: start time: ${startTime}, transaction time: ${transactionTime}`);
     console.log(`Before loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
 
-    while ( startTimeStamp < transactionTimeStamp ) {
+    while (startTimeStamp < transactionTimeStamp) {
         console.log(`looking for transactions in ${account} account  history.`);
         if (!lastActivity.result) {
             console.log(`downloading transaction failed for ${account}.  Skipping.`);
@@ -444,51 +455,51 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
 }
 
 async function getRootInfo(author, permlink, apiEndpoint) {
-  const url = apiEndpoint;
-  const data = JSON.stringify({
-    jsonrpc: "2.0",
-    method: "condenser_api.get_content",
-    params: [author, permlink],
-    id: 1
-  });
-
-  try {
-    const response = await fetch(url, {
-      method: "POST",
-      body: data,
-      headers: { "Content-Type": "application/json" }
+    const url = apiEndpoint;
+    const data = JSON.stringify({
+        jsonrpc: "2.0",
+        method: "condenser_api.get_content",
+        params: [author, permlink],
+        id: 1
     });
 
-    if (!response.ok) {
-      throw new Error(`Error fetching content: ${response.status}`);
-    }
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            body: data,
+            headers: {"Content-Type": "application/json"}
+        });
 
-    const jsonData = await response.json();
-    const content = jsonData.result;
-    return {
-      root_author: content.root_author,
-      root_permlink: content.root_permlink,
-      root_title: content.root_title
-    };
-  } catch (error) {
-    console.error("Error:", error);
-    return null; // Or handle the error differently
-  }
+        if (!response.ok) {
+            throw new Error(`Error fetching content: ${response.status}`);
+        }
+
+        const jsonData = await response.json();
+        const content = jsonData.result;
+        return {
+            root_author: content.root_author,
+            root_permlink: content.root_permlink,
+            root_title: content.root_title
+        };
+    } catch (error) {
+        console.error("Error:", error);
+        return null; // Or handle the error differently
+    }
 }
 
 function newerDate(date1, date2) {
     return new Date(date1) > new Date(date2) ? date1 : date2;
 }
 
-function deleteTriplet(accounts, accountToDelete ) {
+function deleteTriplet(accounts, accountToDelete) {
 //    console.debug(`Deleting ${accountToDelete} from saved accounts.`);
-    return accounts.filter(item => 
+    return accounts.filter(item =>
         !(item.account === accountToDelete)
     );
 }
 
-function showTriplet ( showAccount ) {
-    console.log (`Steem account: ${showAccount.account}`);
-    console.log (`Last activity: ${showAccount.activityTime}`);
-    console.log (`Last display: ${showAccount.lastDisplayTime}`);
+function showTriplet(showAccount) {
+    console.log(`Steem account: ${showAccount.account}`);
+    console.log(`Last activity: ${showAccount.activityTime}`);
+    console.log(`Last display: ${showAccount.lastDisplayTime}`);
 }
