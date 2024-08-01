@@ -158,6 +158,15 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
     }
 }
 
+function deleteTriplet(accounts, accountToDelete) { 
+    const newAccounts = accounts.filter(item => {
+        const keepItem = item.account !== accountToDelete;
+//        console.debug(`${item.account} === ${accountToDelete}: ${!keepItem}`);
+        return keepItem;
+    });
+    return newAccounts;
+}
+
 async function getFollowingListWithRetry(steemUsername, apiNode, retries = 10) {
     while (retries > 0) {
         try {
@@ -221,10 +230,10 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
 
             console.log(`Resuming check from index ${lastCheckedIndex}`);
 
-            let newActivityFound = accountsWithNewActivity.length > 0;
             steemUsername = await getStoredUser();
             apiNode = await getApiServerName();
             const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
+            let newActivityFound = false;
 
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
@@ -240,20 +249,21 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                         console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
                         continue;
                     }
-                    const cT = new Date(`${currentActivityTime}Z`);
+                    const cT = new Date(`${currentActivityTime}`);
 
 
+//                    console.debug(`Comparing ${sT.toISOString()} and ${cT.toISOString()} for user ${followedAccount}.`);
                     if (sT < cT) {
                         newActivityFound = true;
                         // First, check if the account already exists in accountsWithNewActivity
                         if (existingAccountIndex === -1) {
                             // The account doesn't exist in the array yet
-                            const currentActivityTimeDate = new Date(currentActivityTime);
-                            const oneSecondBefore = new Date(currentActivityTimeDate.getTime() - 1000);
+//                            const currentActivityTimeDate = new Date(currentActivityTime);
+                            const oneSecondBefore = new Date(currentActivityTime.getTime() - 1000);
                             const newActivity = {
                                 account: followedAccount,
                                 activityTime: currentActivityTime,
-                                lastDisplayTime: oneSecondBefore.toISOString() // or whatever format you prefer
+                                lastDisplayTime: oneSecondBefore // .toISOString() // or whatever format you prefer
                             };
                             accountsWithNewActivity.push(newActivity);
                         } else {
@@ -263,8 +273,14 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                             accountsWithNewActivity[existingAccountIndex] = existingAccount;
                             // lastDisplayTime remains unchanged
                         }
+//                        console.debug("Saved account.");
                     } else {
-                        // nothing to do right now.
+                        if (existingAccountIndex !== -1) {
+                            accountsWithNewActivity=deleteTriplet(accountsWithNewActivity, followedAccount);
+//                            console.debug("Deleted account");
+                        } else {
+//                            console.debug("Account not in list.");
+                        }
                     }
 
                     // Save progress every 10 accounts checked
@@ -279,7 +295,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                             lastCheckedIndex: i,
                             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
                         });
-                        console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime}.`);
+//                        console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime.toISOString()}.`);
                     }
 
                     // Add a small delay to avoid overwhelming the API
@@ -298,7 +314,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             if (newActivityFound) {
                 const size = accountsWithNewActivity.length;
                 console.log(`Number of accounts with new activity: ${size}`);
-                const notificationMessage = `${size} new post(s) or comment(s) were observed from your followed account(s)!`;
+                const notificationMessage = `${size} of your followed accounts had posts, comments, or replies!`;
                 await chrome.storage.local.set({
                     accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
                     currentCheckTime: currentCheckTime
@@ -436,8 +452,8 @@ async function getActivityTime(user, apiNode, startTime) {
     try {
         let lastTransaction = -1;
         let transactionCount = 0;
-        const currentTime = new Date().toUTCString();
 
+        transactionCount=0;
         while (true) {
             const postData = JSON.stringify({
                 jsonrpc: '2.0',
@@ -481,17 +497,23 @@ async function getActivityTime(user, apiNode, startTime) {
 
             // Check if the operation is a comment
             if (opType === 'comment') {
-                return timestamp;
+                return new Date (`${timestamp}Z`);
             }
 
             // Check if the transaction was before startTime.
             const transactionTime = new Date(timestamp).toUTCString();
-            if ( newerDate ( startTime, transactionTime )) { 
-                return "1970-01-01T00:00:00";
+            if ( new Date (startTime) > new Date (transactionTime) ) { 
+                return new Date("1970-01-01T00:00:00Z");
             }
 
             // Decrement the transaction ID for the next iteration
             lastTransaction = transId -1;
+            if ( transactionCount++ > 100 ) {
+                console.log(`Processed 100 transactions: at ${lastTransaction} for ${user}.  Bailing out.`);
+                return new Date ("1970-01-01T00:00:00Z");
+                
+                // Browser abends if there are too many transactions without returning.
+            }
         }
     } catch (error) {
         console.error(`Error fetching last post time for ${user}:`, error);

@@ -40,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // If we've seen this account before, update the times if necessary
                     activityRecord[item.account].activityTime =
                             newerDate(activityRecord[item.account].activityTime, item.activityTime);
-                    activityRecord[item.account].newestDisplayTime =
+                    activityRecord[item.account].lastDisplayTime =
                             newerDate(activityRecord[item.account].lastDisplayTime, item.lastDisplayTime);
                 }
                 return activityRecord;
@@ -80,7 +80,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const accountURL = `${webServerName}/@${account}`;
 
                         try {
-                            console.log(`account: ${account}, startTime: ${previousNotificationTime}, api Endpoint: ${apiEndpoint} - before getAccountActivities`);
+                            console.log(`account: ${account}, startTime: ${lastDisplayTime}, api Endpoint: ${apiEndpoint} - before getAccountActivities`);
                             const {postList, commentList, replyList} = await getAccountActivities(account, lastDisplayTime, apiEndpoint);
 
                             // Create the HTML content for the account
@@ -283,6 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
                     .then(() => {
                         console.log("Accounts with new activity successfully saved!");
+                        console.dir(uniqueAccountsWithNewActivity);
                     })
                     .catch(error => {
                         console.error("Error clearing accounts:", error);
@@ -336,10 +337,10 @@ function convertToPlainText(html) {
 }
 
 // Function to clear stored accountsWithNewActivity in chrome.storage.local
-async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewAcitivity) {
+async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity) {
     return new Promise((resolve, reject) => {
         console.log("Inside: saveStoredAccountsWithNewActivity");
-        chrome.storage.local.set({'accountsWithNewActivity': JSON.stringify(uniqueAccountsWithNewAcitivity)}, function () {
+        chrome.storage.local.set({'accountsWithNewActivity': JSON.stringify(uniqueAccountsWithNewActivity)}, function () {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
             } else {
@@ -350,7 +351,7 @@ async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewAcitivity)
 }
 
 async function getAccountActivities(account, startTime, apiEndpoint) {
-    const startTimeStamp = new Date(startTime +"Z").getTime();
+    const startTimeStamp = new Date(startTime).getTime();
     let allActivities = [];  // Initialize an empty array to store activities
     let postList = [];    // Initialize list of posts
     let commentList = []; // Initialize list of comments
@@ -373,7 +374,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                 jsonResponse = await response.json();
 //                console.dir(jsonResponse); // View parsed JSON data
                 if (jsonResponse.error) {
-                    if (jsonResponse.error.code === -32801) {
+                    if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
                         retries--;
                         console.log("Rate limit encountered.");
                         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -401,7 +402,6 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
     console.log(`Before loop: start time: ${startTime}, transaction time: ${transactionTime}`);
     console.log(`Before loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
 
-//    while (new Date ( startTime ) < new Date (transactionTime) ) {
     while ( startTimeStamp < transactionTimeStamp ) {
         console.log(`looking for transactions in ${account} account  history.`);
         if (!lastActivity.result) {
@@ -411,36 +411,35 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
         lastActivity.result.forEach(activity => {
             allActivities.push(activity);  // Add the entire activity object to the array
 
-//            if (startTimeStamp < transactionTimeStamp) {
-                let steemOp = activity[1]?.op?.[0];
-                console.log(`Steem operation: ${steemOp}`);
-                if (steemOp === "comment") {
-                    let parentAuthor = activity[1].op[1].parent_author;
-                    if (!parentAuthor) {
-                        postList.push(activity);
+            let steemOp = activity[1]?.op?.[0];
+            console.log(`Steem operation: ${steemOp}`);
+            if (steemOp === "comment") {
+                let parentAuthor = activity[1].op[1].parent_author;
+                if (!parentAuthor) {
+                    postList.push(activity);
+                } else {
+                    let author = activity[1].op[1].author;
+                    if (author === account) {
+                        commentList.push(activity);
                     } else {
-                        let author = activity[1].op[1].author;
-                        if (author === account) {
-                            commentList.push(activity);
-                        } else {
-                            replyList.push(activity);
-                        }
+                        replyList.push(activity);
                     }
                 }
-                console.log("Processed");
-//            }
+            }
+            console.log("Processed");
+            console.log(`Inside loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+            console.log(`Inside loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
         });
 
-        console.log(`Transaction index: ${transactionIndex}`);
-        console.log(`In loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-        console.log(`In loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+        console.log(`After loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+        console.log(`After loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+
         transactionIndex--;
         lastActivity = await FetchAccountHistoryWithRetry(account, transactionIndex, apiEndpoint);
-//        console.log(JSON.stringify(lastActivity, null, 2));
+        console.log(JSON.stringify(lastActivity, null, 2));
         transactionTime = lastActivity.result[0][1].timestamp;
-        transactionTimeStamp = new Date(transactionTime + 'Z').getTime();
+        transactionTimeStamp = new Date(`${transactionTime}Z`).getTime();
     }
-
     return {postList, commentList, replyList};
 }
 
@@ -482,7 +481,7 @@ function newerDate(date1, date2) {
 }
 
 function deleteTriplet(accounts, accountToDelete ) {
-    console.debug(`Deleting ${accountToDelete} from saved accounts.`);
+//    console.debug(`Deleting ${accountToDelete} from saved accounts.`);
     return accounts.filter(item => 
         !(item.account === accountToDelete)
     );
