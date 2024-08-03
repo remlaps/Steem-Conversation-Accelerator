@@ -155,10 +155,10 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
             console.error(`Failed to get activity time for ${followedAccount} after maximum retries due to error.`);
             return null;
         }
-    }
+}
 }
 
-function deleteTriplet(accounts, accountToDelete) { 
+function deleteTriplet(accounts, accountToDelete) {
     const newAccounts = accounts.filter(item => {
         const keepItem = item.account !== accountToDelete;
 //        console.debug(`${item.account} === ${accountToDelete}: ${!keepItem}`);
@@ -234,7 +234,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             apiNode = await getApiServerName();
             const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
             let newActivityFound = false;
-            
+
             console.log(typeof accountsWithNewActivity);
             console.dir(accountsWithNewActivity);
             accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
@@ -244,13 +244,13 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
                 try {
-                    let sT=new Date(checkStartTime);
+                    let sT = new Date(checkStartTime);
                     const existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                     if (existingAccountIndex !== -1) {
-                        sT=new Date(accountsWithNewActivity[existingAccountIndex].lastDisplayTime);
+                        sT = new Date(accountsWithNewActivity[existingAccountIndex].lastDisplayTime);
                     }
 
-                    const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode, sT );
+                    const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode, sT);
                     if (currentActivityTime === null) {
                         console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
                         continue;
@@ -282,7 +282,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
 //                        console.debug("Saved account.");
                     } else {
                         if (existingAccountIndex !== -1) {
-                            accountsWithNewActivity=deleteTriplet(accountsWithNewActivity, followedAccount);
+                            accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
 //                            console.debug("Deleted account");
                         } else {
 //                            console.debug("Account not in list.");
@@ -353,10 +353,10 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
     isCheckingActivity = false;
     await saveIsCheckingActivity(isCheckingActivity);
 }
-    
+
 async function displayBrowserNotification(message) {
-  console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
-  
+    console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
+
     // Clear all notifications created by this extension
     await chrome.notifications.getAll(function (notifications) {
         for (let notificationId in notifications) {
@@ -372,13 +372,13 @@ async function displayBrowserNotification(message) {
         }
     });
 
-  // Create a new notification
-  chrome.notifications.create({
-    type: 'basic',
-    iconUrl: 'SCAicon.png',
-    title: 'Steem Activity Alert',
-    message: message
-  });
+    // Create a new notification
+    chrome.notifications.create({
+        type: 'basic',
+        iconUrl: 'SCAicon.png',
+        title: 'Steem Activity Alert',
+        message: message
+    });
 }
 
 // Handle notification click
@@ -477,74 +477,87 @@ async function getFollowingList(steemUsername, apiNode, limit = 100) {
 }
 
 async function getActivityTime(user, apiNode, startTime) {
-//    console.log(`Getting account history for ${user} from ${startTime} until now.`);
+    //    console.log(`Getting account history for ${user} from ${startTime} until now.`);
     try {
         let lastTransaction = -1;
         let transactionCount = 0;
+        const maxTransactions = 100;
 
-        transactionCount=0;
-        while (true) {
+        while (transactionCount < maxTransactions) {
             const postData = JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'condenser_api.get_account_history',
-                params: [user, lastTransaction, transactionCount],
+                params: [user, lastTransaction, 1], // Keep fetching one at a time as in original
                 id: 1
             });
 
-            loopTime=new Date();
-            const response = await fetch(apiNode, {
-                keepalive: true,
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: postData
-            });
+            console.log(`Fetching data for ${user}, transaction: ${lastTransaction}`);
+            const loopStartTime = new Date();
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error(`Response not OK when Fetching data for ${user}: ${errorText}`);
+            try {
+                const response = await fetch(apiNode, {
+                    keepalive: true,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: postData
+                });
+
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error(`Response not OK when Fetching data for ${user}: ${response.status} ${errorText}`);
+                    return null;
+                }
+
+                const data = await response.json();
+
+                if (data.error) {
+                    console.error(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
+                    return null;
+                }
+
+                if (!data.result || data.result.length < 1 || data.result[0].length < 2 || data.result[0][1].timestamp.length === 0) {
+                    console.log(`No recent activity found for ${user}`);
+                    return null;
+                }
+
+                const [transId, transaction] = data.result[0];
+                const {timestamp, op} = transaction;
+                const [opType] = op;
+
+                console.log(`Transaction: ${transId}, Operation: ${opType}, Timestamp: ${timestamp}`);
+
+                if (opType === 'comment') {
+                    return new Date(`${timestamp}Z`);
+                }
+
+                if (new Date(startTime) > new Date(`${timestamp}Z`)) {
+                    return new Date("1970-01-01T00:00:00Z");
+                }
+
+                lastTransaction = transId - 1;
+                transactionCount++;
+
+                if (transactionCount >= maxTransactions) {
+                    console.log(`Processed ${maxTransactions} transactions: at ${lastTransaction} for ${user}. Bailing out.`);
+                    return new Date("1970-01-01T00:00:00Z");
+                }
+
+                const loopEndTime = new Date();
+                console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
+
+            } catch (fetchError) {
+                console.error(`Fetch error for ${user}:`, fetchError);
                 return null;
-            }
-
-            const data = await response.json();
-            if (data.error) {
-                console.error(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
-                return null;
-            }
-
-            if (!data.result || data.result.length < 1 || data.result[0].length < 2 || data.result[0][1].timestamp.length === 0) {
-                console.log(`No recent activity found for ${user}`);
-                return null;
-            }
-
-            const timestamp = data.result[0][1].timestamp;
-            let transId = data.result[0][0];
-            let opType = data.result[0][1].op[0];
-//            console.log(`looping: ${loopTime}, startTime: ${startTime}`);
-//            console.log(`transaction: ${transId}, operation: ${opType}, timestamp: ${timestamp}`);
-
-            // Check if the operation is a comment
-            if (opType === 'comment') {
-                return new Date (`${timestamp}Z`);
-            }
-
-            // Check if the transaction was before startTime.
-            if ( new Date (startTime) > new Date (`${timestamp}Z`) ) { 
-                return new Date("1970-01-01T00:00:00Z");
-            }
-
-            // Decrement the transaction ID for the next iteration
-            lastTransaction = transId -1;
-            if ( transactionCount++ > 100 ) {
-                console.log(`Processed 100 transactions: at ${lastTransaction} for ${user}.  Bailing out.`);
-                return new Date ("1970-01-01T00:00:00Z");
-                
-                // Browser abends if there are too many transactions without returning.
             }
         }
+
+        console.log(`No comment found within ${maxTransactions} transactions for ${user}`);
+        return new Date("1970-01-01T00:00:00Z");
+
     } catch (error) {
-        console.error(`Error fetching last post time for ${user}:`, error);
+        console.error(`Unexpected error for ${user}:`, error);
         return null;
     }
 }
@@ -557,13 +570,13 @@ async function initializeAlertTime() {
     const now = new Date();
     const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
     const lastAlertTime = fifteenMinutesAgo.toISOString(); // Initialize with current UTC date and time if not previously set
-    
+
     // Save in chrome.storage.local
-    await chrome.storage.local.set({ 'lastAlertTime': lastAlertTime });
-    
+    await chrome.storage.local.set({'lastAlertTime': lastAlertTime});
+
     console.log("Done setting up alarms at initialization.");
 }
 
 chrome.runtime.onStartup.addListener(() => {
-  setupAlarms();
+    setupAlarms();
 });

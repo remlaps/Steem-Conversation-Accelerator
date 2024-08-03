@@ -129,9 +129,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 });
                                 content += `</ul>`;
                                 content += `</div>`;  // End of indented content
-                            } else {
-                                content += `<strong>Posts:</strong><br><br>`;
-                                content += `<div class="indented-content"><p>No posts found.</p></div>`;
+//                            } else {
+//                                content += `<strong>Posts:</strong><br><br>`;
+//                                content += `<div class="indented-content"><p>No posts found.</p></div>`;
                             }
 
                             content += `<br><br>`; // Add some spacing between sections
@@ -195,9 +195,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 ;
                                 content += `</ul>`;
                                 content += `</div>`;  // End of indented content
-                            } else {
-                                content += `<strong>Comments:</strong><br><br>`;
-                                content += `<div class="indented-content"><p>No comments found.</p></div>`;
+//                            } else {
+//                                content += `<strong>Comments:</strong><br><br>`;
+//                                content += `<div class="indented-content"><p>No comments found.</p></div>`;
                             }
 
                             content += `<br><br>`; // Add some spacing between sections
@@ -261,9 +261,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 ;
                                 content += `</ul>`;
                                 content += `</div>`;  // End of indented content
-                            } else {
-                                content += `<strong>Replies:</strong><br><br>`;
-                                content += `<div class="indented-content"><p>No replies found.</p></div>`;
+//                            } else {
+//                                content += `<strong>Replies:</strong><br><br>`;
+//                                content += `<div class="indented-content"><p>No replies found.</p></div>`;
                             }
                             listItem.innerHTML = content;
                         } catch (error) {
