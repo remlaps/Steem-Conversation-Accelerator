@@ -130,7 +130,7 @@ function showAlarms() {
     });
 }
 
-async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 3) {
+async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 1) {
     try {
         const currentActivityTime = await getActivityTime(followedAccount, apiNode, startTime);
         if (currentActivityTime !== null) {
@@ -167,7 +167,7 @@ function deleteTriplet(accounts, accountToDelete) {
     return newAccounts;
 }
 
-async function getFollowingListWithRetry(steemUsername, apiNode, retries = 10) {
+async function getFollowingListWithRetry(steemUsername, apiNode, retries = 2) {
     while (retries > 0) {
         try {
             const followingList = await getFollowingList(steemUsername, apiNode);
@@ -234,6 +234,12 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             apiNode = await getApiServerName();
             const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
             let newActivityFound = false;
+            
+            console.log(typeof accountsWithNewActivity);
+            console.dir(accountsWithNewActivity);
+            accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
+            console.log(typeof accountsWithNewActivity);
+            console.dir(accountsWithNewActivity);
 
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
@@ -389,9 +395,25 @@ chrome.notifications.onClicked.addListener(() => {
     savedAccountList = [];
 });
 
-async function getFollowingList(steemUsername, apiNode, limit = 1000) {
+async function deleteNoFollows(followList, activityTriplets) {
+    const newActivityTriplets = [];
+    for (const triplet of activityTriplets) {
+        if (followList.includes(triplet.account)) {
+            newActivityTriplets.push(triplet);
+        }
+    }
+
+    // Ensure accountsWithNewActivity is an array
+    if (!Array.isArray(accountsWithNewActivity)) {
+        accountsWithNewActivity = Object.values(accountsWithNewActivity); // Convert to array
+    }
+
+    return newActivityTriplets;
+}
+
+async function getFollowingList(steemUsername, apiNode, limit = 100) {
     let followingList = [];
-    let start = '';
+    let start = null;
 
     // Retrieve stored progress
     const storedData = await chrome.storage.local.get(['lastFetchedUser', 'partialFollowingList']);
@@ -404,6 +426,8 @@ async function getFollowingList(steemUsername, apiNode, limit = 1000) {
     try {
         console.log(`Retrieving follower list for ${steemUsername} from: ${apiNode}`);
         do {
+            // Reset data before each request
+            let data;
             const response = await fetch(apiNode, {
                 method: 'POST',
                 headers: {
@@ -416,22 +440,27 @@ async function getFollowingList(steemUsername, apiNode, limit = 1000) {
                     id: 1
                 })
             });
-            const data = await response.json();
+            data = await response.json();
+
             if (data.error) {
                 console.error('Error fetching following list:', data.error.message);
                 break;
             }
-            const users = data.result.map(user => user.following);
-            followingList = followingList.concat(users);
-            start = users.length === limit ? users[users.length - 1] : null;
-            console.log(`Fetched ${users.length} users. Next start: ${start}`);
 
-            // Save progress after each successful fetch
-            await chrome.storage.local.set({
-                lastFetchedUser: start,
-                partialFollowingList: followingList
-            });
-
+            if (data && data.result && Array.isArray(data.result)) {
+                const users = data.result.map(user => user.following);
+                followingList = followingList.concat(users);
+                start = users.length === limit ? users[users.length - 1] : null;
+                console.log(`Fetched ${users.length} users. Next start: ${start}`);
+                // Save progress after each successful fetch
+                await chrome.storage.local.set({
+                    lastFetchedUser: start,
+                    partialFollowingList: followingList
+                });
+            } else {
+                console.error('Unexpected API response structure:', data);
+                break;
+            }
         } while (start);
 
         followingList = Array.from(new Set(followingList));
@@ -501,8 +530,7 @@ async function getActivityTime(user, apiNode, startTime) {
             }
 
             // Check if the transaction was before startTime.
-            const transactionTime = new Date(timestamp).toUTCString();
-            if ( new Date (startTime) > new Date (transactionTime) ) { 
+            if ( new Date (startTime) > new Date (`${timestamp}Z`) ) { 
                 return new Date("1970-01-01T00:00:00Z");
             }
 
@@ -524,71 +552,6 @@ async function getActivityTime(user, apiNode, startTime) {
 function newerDate(date1, date2) {
     return new Date(date1) > new Date(date2) ? date1 : date2;
 }
-
-/*
- * Replacing with get_account_history call
- * 
- */
-
-async function getLastPost(user, apiNode) {
-    try {
-        response = await fetch(apiNode, {
-            keepalive: true,
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                jsonrpc: '2.0',
-                method: 'database_api.list_accounts',
-                params: {
-                    start: user,
-                    limit: 1,
-                    order: 'by_name'
-                },
-                id: 1
-            })
-        });
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.log(`Error response: ${errorText}`);
-            return null;
-        }
-
-        const data = await response.json();
-//        console.log(`Response data: ${JSON.stringify(data, null, 2)}`);
-
-        if (data.error) {
-            console.warn(`Data error while fetching last post time for ${user}:`, data.error.message);
-            return null; // Return null on error
-        }
-
-        if (!data.result || !data.result.accounts || data.result.accounts.length === 0) {
-            console.warn(`No accounts found for ${user}`);
-            return null; // No accounts found
-        }
-
-        const lastPostTime = data.result.accounts[0].last_post;
-        return lastPostTime; // Return last post time
-    } catch (error) {
-        console.error(`Error fetching last post time for ${user}:`, error);
-        return null; // Return null on exception
-    } finally {
-    }
-}
-
-/*
- * Not in use(?)
- */
-//async function updateActivityTimes(followingList, lastActivityTimes) {
-//    for (let follower of followingList) {
-//        const history = await steem.api.getAccountHistoryAsync(follower, -1, 1);
-//        if (history.length) {
-//            lastActivityTimes[follower] = history[0][1].timestamp;
-//        }
-//    }
-//}
 
 async function initializeAlertTime() {
     const now = new Date();

@@ -67,6 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                      */
                     const apiEndpoint = await getApiServerName();
 
+                    let firstActivityTime = "";
                     for (const accountTriplet of uniqueAccountsWithNewActivity) {
                         console.log(`Account: ${accountTriplet.account}`);
                         console.log(`Newest Activity Time: ${new Date(accountTriplet.activityTime).toString()}`);
@@ -80,6 +81,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const webServerName = await getWebServerName();
                         const account = accountTriplet.account;
                         const lastActivityTime = accountTriplet.activityTime;
+                        const firstActivityTime = lastActivityTime;
                         const lastDisplayTime = accountTriplet.lastDisplayTime;
                         const accountURL = `${webServerName}/@${account}`;
 
@@ -276,7 +278,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                             // account not found in the list
                             // this should never happen
                         } else {
-                            accountTriplet.lastDisplayTime = lastActivityTime;
+                            accountTriplet.lastDisplayTime = firstActivityTime;
                             uniqueAccountsWithNewActivity[uniqueAccountIndex] = accountTriplet;
                         }
                         console.log("After checks: ");
@@ -489,13 +491,6 @@ async function getRootInfo(author, permlink, apiEndpoint) {
 
 function newerDate(date1, date2) {
     return new Date(date1) > new Date(date2) ? date1 : date2;
-}
-
-function deleteTriplet(accounts, accountToDelete) {
-//    console.debug(`Deleting ${accountToDelete} from saved accounts.`);
-    return accounts.filter(item =>
-        !(item.account === accountToDelete)
-    );
 }
 
 function showTriplet(showAccount) {
