@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
                     // Create the HTML content for the account
                     // let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
+                    // let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
 
                     console.debug("Entering processAllItems.");
                     const content = await processAllItems(postList, commentList, replyList, apiEndpoint, webServerName, accountURL);
