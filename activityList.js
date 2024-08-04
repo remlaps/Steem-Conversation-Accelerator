@@ -46,8 +46,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 return activityRecord;
             }, {}));
             const listSize = uniqueAccountsWithNewActivity.length;
-//            const listValues = uniqueAccountsWithNewActivity.join(', ');
-
             const accountsList = document.getElementById('accountsList');
 
             await updateAccountsList(uniqueAccountsWithNewActivity);
@@ -116,181 +114,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const { postList, commentList, replyList } = await getAccountActivities(account, lastDisplayTime, apiEndpoint);
 
                     // Create the HTML content for the account
-                    let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
+                    // let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
 
-                    if (postList.length > 0) {
-                        content += `<strong>Posts:</strong><br><br><ul>`;
-                        content += `<div class="indented-content">`; // Start of indented content
-                        postList.forEach(post => {
-                            {
-                                let author, title, permlink, body, postTime;
-                                if (post && post[1] && post[1].op && Array.isArray(post[1].op) && post[1].op.length > 1 && post[1].op[1]) {
-                                    const postData = post[1].op[1];
-                                    author = postData.author || "Undefined author";
-                                    title = postData.title || "Title missing";
-                                    permlink = postData.permlink || "Permlink missing";
-                                    body = postData.body || "Body is empty";
-                                    postTime = post[1].timestamp || "Post time is empty";
-
-                                    console.log("Post data:", { postTime, author, title, permlink, body: body.substring(0, 50) + "..." }); // Log truncated body for brevity
-                                } else {
-                                    console.warn("Unexpected post structure:", post);
-                                    author = "Unknown";
-                                    title = "Unknown";
-                                    permlink = "Unknown";
-                                    body = "Unknown";
-                                    postTime = "Unknown";
-                                }
-                                const plainBody = convertToPlainText(body);
-                                const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
-
-                                content += `<li class="post-box">`; // Add 'post-box' class here
-                                content += `<strong>Author:</strong> ${author}<br>`;
-                                content += `<strong>Title:</strong> ${title}<br>`;
-                                content += `<strong>Date & Time:</strong> ${postTime}<br>`;
-                                content += `<strong>URL:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
-                                content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
-                                content += `</li>`;
-                            }
-                        });
-                        content += `</ul>`;
-                        content += `</div>`;  // End of indented content
-                        //                            } else {
-                        //                                content += `<strong>Posts:</strong><br><br>`;
-                        //                                content += `<div class="indented-content"><p>No posts found.</p></div>`;
-                    }
-
-                    content += `<br><br>`; // Add some spacing between sections
-
-                    if (commentList.length > 0) {
-                        content += `<strong>Comments:</strong><br><br><ul>`;
-                        content += `<div class="indented-content">`; // Start of indented content
-                        for (const comment of commentList) {
-                            let author = "Unknown";
-                            let parent_author = "Unknown";
-                            let parent_permlink = "Unknown";
-                            let root_author = "Unknown";
-                            let root_permlink = "Unknown";
-                            let root_title = "Unknown";
-                            let permlink = "Unknown";
-                            let body = "Unknown";
-                            let commentTime = "Unknown";
-
-                            if (comment && comment[1] && comment[1].op && Array.isArray(comment[1].op)
-                                && comment[1].op.length > 1 && comment[1].op[1]) {
-                                const commentData = comment[1].op[1];
-                                author = commentData.author || "Undefined author";
-                                parent_author = commentData.parent_author || "Parent author missing";
-                                parent_permlink = commentData.parent_permlink || "Parent permlink missing:";
-                                permlink = commentData.permlink || "Permlink missing";
-                                body = commentData.body || "Body is empty";
-                                commentTime = comment[1].timestamp || "commentTime is empty";
-                                const rootInfo = await getRootInfo(author, permlink, apiEndpoint);
-
-                                if (rootInfo) {
-                                    ({ root_author, root_permlink, root_title } = rootInfo);
-                                } else {
-                                    root_author = "root_author missing";
-                                    root_permlink = "root_permlink missing";
-                                    root_title = "root_title missing";
-                                }
-                                console.log("Comment data:", { commentTime, author, permlink, body: body.substring(0, 50) + "..." }); // Log truncated body for brevity
-                            } else {
-                                console.warn(`Unexpected comment structure:", ${JSON.stringify(comment)}`);
-                            }
-
-                            const plainBody = convertToPlainText(body);
-                            const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
-
-                            content += `<li class="post-box">`; // Add 'post-box' class here
-                            content += `<strong>Author:</strong> ${author}<br>`;
-                            content += `<strong>Date & Time:</strong> ${commentTime}<br>`;
-
-                            // All comments should have roots
-                            content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
-
-                            // Check if parent and root links are different before adding parent
-                            if (parent_author !== root_author || parent_permlink !== root_permlink) {
-                                content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
-                            }
-
-                            content += `<strong>Comment link:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
-                            content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
-                            content += `</li>`;
-                        }
-                        ;
-                        content += `</ul>`;
-                        content += `</div>`;  // End of indented content
-                        //                            } else {
-                        //                                content += `<strong>Comments:</strong><br><br>`;
-                        //                                content += `<div class="indented-content"><p>No comments found.</p></div>`;
-                    }
-
-                    content += `<br><br>`; // Add some spacing between sections
-
-                    if (replyList.length > 0) {
-                        content += `<strong>Replies:</strong><br><br><ul>`;
-                        content += `<div class="indented-content">`; // Start of indented content
-                        for (const reply of replyList) {
-                            let author = "Unknown";
-                            let parent_author = "Unknown";
-                            let parent_permlink = "Unknown";
-                            let root_author = "Unknown";
-                            let root_permlink = "Unknown";
-                            let root_title = "Unknown";
-                            let permlink = "Unknown";
-                            let body = "Unknown";
-                            let replyTime = "Unknown";
-
-                            if (reply && reply[1] && reply[1].op && Array.isArray(reply[1].op)
-                                && reply[1].op.length > 1 && reply[1].op[1]) {
-                                const replyData = reply[1].op[1];
-                                author = replyData.author || "Undefined author";
-                                parent_author = replyData.parent_author || "Parent author missing";
-                                parent_permlink = replyData.parent_permlink || "Parent permlink missing:";
-                                permlink = replyData.permlink || "Permlink missing";
-                                body = replyData.body || "Body is empty";
-                                replyTime = reply[1].timestamp || "replyTime is empty";
-                                const rootInfo = await getRootInfo(author, permlink, apiEndpoint);
-
-                                if (rootInfo) {
-                                    ({ root_author, root_permlink, root_title } = rootInfo);
-                                } else {
-                                    root_author = "root_author missing";
-                                    root_permlink = "root_permlink missing";
-                                    root_title = "root_title missing";
-                                }
-                                console.log("Reply data:", { replyTime, author, permlink, body: body.substring(0, 50) + "..." });
-                            } else {
-                                console.warn(`Unexpected reply structure:", ${JSON.stringify(comment)}`);
-                            }
-
-                            const plainBody = convertToPlainText(body);
-                            const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
-
-                            content += `<li class="post-box">`; // Add 'post-box' class here
-                            content += `<strong>Author:</strong> ${author}<br>`;
-                            content += `<strong>Date & Time:</strong> ${replyTime}<br>`;
-
-                            // All replies should have roots
-                            content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
-
-                            // Check if parent and root links are different before adding parent
-                            if (parent_author !== root_author || parent_permlink !== root_permlink) {
-                                content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
-                            }
-
-                            content += `<strong>Reply link:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${webServerName}/@${author}/${permlink}</a><br>`;
-                            content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
-                            content += `</li>`;
-                        }
-                        ;
-                        content += `</ul>`;
-                        content += `</div>`;  // End of indented content
-                        //                            } else {
-                        //                                content += `<strong>Replies:</strong><br><br>`;
-                        //                                content += `<div class="indented-content"><p>No replies found.</p></div>`;
-                    }
+                    console.debug("Entering processAllItems.");
+                    const content = await processAllItems(postList, commentList, replyList, apiEndpoint, webServerName);
+                    console.debug("Exited processAllItems.");
                     listItem.innerHTML = content;
                 } catch (error) {
                     console.warn(`Error fetching activities for account ${account}:`, error);
@@ -312,6 +140,122 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }
     }
+
+    function createContentItem(item, type, webServerName, accountURL, rootInfo) {
+        let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
+        
+        if (item && item[1] && item[1].op && Array.isArray(item[1].op) && item[1].op.length > 1 && item[1].op[1]) {
+            const itemData = item[1].op[1];
+            author = itemData.author || "Undefined author";
+            title = itemData.title || "Title missing";
+            permlink = itemData.permlink || "Permlink missing";
+            body = itemData.body || "Body is empty";
+            timestamp = item[1].timestamp || "Timestamp is empty";
+            parent_author = itemData.parent_author || "Parent author missing";
+            parent_permlink = itemData.parent_permlink || "Parent permlink missing";
+        } else {
+            console.warn(`Unexpected ${type} structure:`, item);
+            return `<li class="post-box">Error: Invalid ${type} data</li>`;
+        }
+
+        if (rootInfo) {
+            root_author = rootInfo.root_author;
+            root_permlink = rootInfo.root_permlink;
+            root_title = rootInfo.root_title;
+        }
+    
+        const plainBody = convertToPlainText(body);
+        const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
+    
+        let content = `<li class="post-box">`;
+        content += `<strong>Author:</strong> ${author}<br>`;
+        content += `<strong>Date & Time:</strong> ${timestamp}<br>`;
+    
+        if (type === 'post') {
+            content += `<strong>Title:</strong> ${title}<br>`;
+            content += `<strong>URL:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
+        } else {
+            // For comments and replies
+            content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
+            if (parent_author !== root_author || parent_permlink !== root_permlink) {
+                content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
+            }
+            content += `<strong>${type.charAt(0).toUpperCase() + type.slice(1)} link:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${webServerName}/@${author}/${permlink}</a><br>`;
+        }
+    
+        content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
+        content += `</li>`;
+    
+        console.log(`Returning from createContentItem: ${content}`);
+        console.dir(content);
+        return content;
+    }
+    
+    async function processItems(items, type, apiEndpoint, webServerName, accountURL) {
+        console.debug(`Entered processItems: ${type}`);
+        let content;
+        if ( type !== "reply" ) {
+           content = `<strong>${type.charAt(0).toUpperCase() + type.slice(1)}s:</strong><br><br><ul>`;
+        } else {
+            content = "<strong>Replies:</strong><br><br><ul>";
+        }
+        content += `<div class="indented-content">`;
+        let rootInfo;
+        
+        for (const item of items) {
+            console.debug(`Item: ${item}`);
+            console.log("In processItems for loop.");
+            console.debug(`author: ${item[1].op[1].author}, permlink: ${item[1].op[1].permlink}, api: ${apiEndpoint}`);
+            console.dir (item);
+            if (type !== 'post') {
+                rootInfo = await getRootInfo(item[1].op[1].author, item[1].op[1].permlink, apiEndpoint);
+                if (rootInfo) {
+                    console.log(`Got rootInfo: ${rootInfo}`);
+                    console.dir(rootInfo);
+                    item[1].op[1].root_author = rootInfo.root_author;
+                    item[1].op[1].root_permlink = rootInfo.root_permlink;
+                    item[1].op[1].root_title = rootInfo.root_title;
+                } else {
+                    console.debug("Failed to retrieve rootInfo");
+                }
+            }
+            content += createContentItem(item, type, webServerName, accountURL, rootInfo);
+        }
+        
+        content += `</ul></div>`;
+        console.debug(`Exiting processItems, type: ${type}, content: ${content}`);
+        return content;
+    }
+    
+    // Main function
+    async function processAllItems(postList, commentList, replyList, apiEndpoint, webServerName, accountURL) {
+        console.debug("Entered processAllItems");
+        let content = '';
+        
+        if (postList.length > 0) {
+            console.log("Going into processItems: post");
+            console.dir (postList);
+            content += await processItems(postList, 'post', apiEndpoint, webServerName, accountURL);
+            content += `<br><br>`;
+        }
+        
+        if (commentList.length > 0) {
+            console.log("Going into processItems: comment");
+            console.dir (commentList);
+            content += await processItems(commentList, 'comment', apiEndpoint, webServerName), accountURL;
+            content += `<br><br>`;
+        }
+                
+        if (replyList.length > 0) {
+            console.log("Going into processItems: reply");
+            console.dir(replyList);
+            content += await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL);
+        }
+        
+        console.debug(`Exiting processAllItems: ${content}`);
+        return content;
+    }
+
 });
 
 
