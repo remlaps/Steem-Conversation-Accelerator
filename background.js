@@ -235,11 +235,11 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
             let newActivityFound = false;
 
-            console.log(typeof accountsWithNewActivity);
-            console.dir(accountsWithNewActivity);
+            // console.log(typeof accountsWithNewActivity);
+            // console.dir(accountsWithNewActivity);
             accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
-            console.log(typeof accountsWithNewActivity);
-            console.dir(accountsWithNewActivity);
+            // console.log(typeof accountsWithNewActivity);
+            // console.dir(accountsWithNewActivity);
 
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
@@ -491,7 +491,7 @@ async function getActivityTime(user, apiNode, startTime) {
                 id: 1
             });
 
-            console.log(`Fetching data for ${user}, transaction: ${lastTransaction}`);
+            // console.log(`Fetching data for ${user}, transaction: ${lastTransaction}`);
             const loopStartTime = new Date();
 
             try {
@@ -526,7 +526,7 @@ async function getActivityTime(user, apiNode, startTime) {
                 const {timestamp, op} = transaction;
                 const [opType] = op;
 
-                console.log(`Transaction: ${transId}, Operation: ${opType}, Timestamp: ${timestamp}`);
+                // console.log(`Transaction: ${transId}, Operation: ${opType}, Timestamp: ${timestamp}`);
 
                 if (opType === 'comment') {
                     return new Date(`${timestamp}Z`);
@@ -545,7 +545,7 @@ async function getActivityTime(user, apiNode, startTime) {
                 }
 
                 const loopEndTime = new Date();
-                console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
+                // console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
 
             } catch (fetchError) {
                 console.error(`Fetch error for ${user}:`, fetchError);

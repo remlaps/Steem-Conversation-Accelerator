@@ -118,7 +118,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     // let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
 
                     console.debug("Entering processAllItems.");
-                    const content = await processAllItems(postList, commentList, replyList, apiEndpoint, webServerName, accountURL);
+                    const content = await processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL);
                     console.debug("Exited processAllItems.");
                     listItem.innerHTML = content;
                 } catch (error) {
@@ -159,12 +159,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             return `<li class="post-box">Error: Invalid ${type} data</li>`;
         }
 
-        if (rootInfo) {
-            root_author = rootInfo.root_author;
-            root_permlink = rootInfo.root_permlink;
-            root_title = rootInfo.root_title;
-        }
-    
+   
         const plainBody = convertToPlainText(body);
         const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
     
@@ -177,6 +172,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             content += `<strong>URL:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
         } else {
             // For comments and replies
+
+            root_author = rootInfo.root_author;
+            root_permlink = rootInfo.root_permlink;
+            root_title = rootInfo.root_title;
+            
             content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
             if (parent_author !== root_author || parent_permlink !== root_permlink) {
                 content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
@@ -220,7 +220,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.debug("Failed to retrieve rootInfo");
                 }
             }
-            content += createContentItem(item, type, webServerName, accountURL, permLink, rootInfo);
+            content += createContentItem(item, type, webServerName, accountURL, rootInfo);
         }
         
         content += `</ul></div>`;
@@ -229,9 +229,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     
     // Main function
-    async function processAllItems(postList, commentList, replyList, apiEndpoint, webServerName, accountURL, permLink) {
+    async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, permLink) {
         console.debug("Entered processAllItems");
-        let content = '';
+        let content = `Followed account: ${account}<br><br>`;
         
         if (postList.length > 0) {
             console.log("Going into processItems: post");
