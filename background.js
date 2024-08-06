@@ -130,7 +130,7 @@ function showAlarms() {
     });
 }
 
-async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 1) {
+async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 5) {
     try {
         const currentActivityTime = await getActivityTime(followedAccount, apiNode, startTime);
         if (currentActivityTime !== null) {
@@ -167,7 +167,7 @@ function deleteTriplet(accounts, accountToDelete) {
     return newAccounts;
 }
 
-async function getFollowingListWithRetry(steemUsername, apiNode, retries = 2) {
+async function getFollowingListWithRetry(steemUsername, apiNode, retries = 5) {
     while (retries > 0) {
         try {
             const followingList = await getFollowingList(steemUsername, apiNode);
@@ -443,7 +443,8 @@ async function getFollowingList(steemUsername, apiNode, limit = 100) {
             data = await response.json();
 
             if (data.error) {
-                console.error('Error fetching following list:', data.error.message);
+                // warn for single attempt, error in calling routine after retries.
+                console.warn('Error fetching following list:', data.error.message);
                 break;
             }
 
@@ -513,7 +514,8 @@ async function getActivityTime(user, apiNode, startTime) {
                 const data = await response.json();
 
                 if (data.error) {
-                    console.error(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
+                    // warn for single attempt, error in calling routine after retries.
+                    console.warn(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
                     return null;
                 }
 
@@ -548,7 +550,8 @@ async function getActivityTime(user, apiNode, startTime) {
                 // console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
 
             } catch (fetchError) {
-                console.error(`Fetch error for ${user}:`, fetchError);
+                // warn for single attempt, error in calling routine after retries.
+                console.warn(`Fetch error for ${user}:`, fetchError);
                 return null;
             }
         }
@@ -557,7 +560,8 @@ async function getActivityTime(user, apiNode, startTime) {
         return new Date("1970-01-01T00:00:00Z");
 
     } catch (error) {
-        console.error(`Unexpected error for ${user}:`, error);
+        // warn for single attempt, error in calling routine after retries.
+        console.warn(`Unexpected error for ${user}:`, error);
         return null;
     }
 }

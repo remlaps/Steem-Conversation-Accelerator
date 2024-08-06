@@ -164,12 +164,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
     
         let content = `<li class="post-box">`;
-        content += `<strong>Author:</strong> ${author}<br>`;
-        content += `<strong>Date & Time:</strong> ${timestamp}<br>`;
     
         if (type === 'post') {
-            content += `<strong>Title:</strong> ${title}<br>`;
-            content += `<strong>URL:</strong> <a href="${accountURL}/${permlink}" target="_blank">${accountURL}/${permlink}</a><br>`;
+            content += `<strong><A HREF="${accountURL}/${permlink}" target="_blank">${title}</a></strong><br><br>`;
         } else {
             // For comments and replies
 
@@ -177,13 +174,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             root_permlink = rootInfo.root_permlink;
             root_title = rootInfo.root_title;
             
-            content += `<strong>Thread: </strong> <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
+            content += `<strong><a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a></strong><br><br>`;
             if (parent_author !== root_author || parent_permlink !== root_permlink) {
                 content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
             }
             content += `<strong>${type.charAt(0).toUpperCase() + type.slice(1)} link:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${webServerName}/@${author}/${permlink}</a><br>`;
         }
-    
+
+        content += `<strong>Author:</strong> ${author} / <strong>Date & Time:</strong> ${timestamp}<br><br>`;
         content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
         content += `</li>`;
     
@@ -231,7 +229,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Main function
     async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, permLink) {
         console.debug("Entered processAllItems");
-        let content = `Followed account: ${account}<br><br>`;
+        let content = `<b><i>Followed account:</i></b> <a href="${webServerName}/@${account}/posts">${account}</a><br><br>`;
         
         if (postList.length > 0) {
             console.log("Going into processItems: post");
@@ -387,8 +385,8 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                 }
             }
             console.log("Processed");
-            console.log(`Inside loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-            console.log(`Inside loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+            // console.log(`Inside loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+            // console.log(`Inside loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
         });
 
         console.log(`After loop: start time: ${startTime}, transaction time: ${transactionTime}`);

@@ -7,11 +7,21 @@
     <link rel="stylesheet" type="text/css" href="styles.css">
 </head>
 <body>
-    <h1>New Activity on Steem</h1>
-    <p>Activity observed for accounts followed by <span id="steemUsername">Loading...</span> after: <span id="previous-alert-time">Loading...</span></p>
-    <ul id="accountsList">
-        <!-- Accounts with new activity will be dynamically added here -->
-    </ul>
+    <div class="container">
+        <header>Header</header>
+        <div class="content">
+            <div class="left-sidebar">Left side</div>
+            <main class="main-content">
+                <h1>New Activity on Steem</h1>
+                <p>Activity observed for accounts followed by <span id="steemUsername">Loading...</span> after: <span id="previous-alert-time">Loading...</span></p>
+                <ul id="accountsList">
+                    <!-- Accounts with new activity will be dynamically added here -->
+                </ul>
+            </main>
+            <div class="right-sidebar">Right side</div>
+        </div>
+        <footer>Footer</footer>
+    </div>
     <script src="localStorageUtils.js"></script>
     <script src="activityList.js"></script>
 </body>
