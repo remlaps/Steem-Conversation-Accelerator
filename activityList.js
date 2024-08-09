@@ -176,7 +176,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             content += `<strong><a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a></strong><br><br>`;
             if (parent_author !== root_author || parent_permlink !== root_permlink) {
-                content += `<strong>Replying to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">View Parent Post</a><br>`;
+                content += `<strong>Reply:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">/@${parent_author}/${parent_permlink}</a><br>`;
             }
             content += `<strong>${type.charAt(0).toUpperCase() + type.slice(1)} link:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${webServerName}/@${author}/${permlink}</a><br>`;
         }
@@ -193,12 +193,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function processItems(items, type, apiEndpoint, webServerName, accountURL, permLink ) {
         console.debug(`Entered processItems: ${type}`);
         let content;
-        if ( type !== "reply" ) {
-           content = `<strong>${type.charAt(0).toUpperCase() + type.slice(1)}s:</strong><br><br><ul>`;
-        } else {
-            content = "<strong>Replies:</strong><br><br><ul>";
-        }
-        content += `<div class="indented-content">`;
+        // if ( type !== "reply" ) {
+        //    content = `<strong>${type.charAt(0).toUpperCase() + type.slice(1)}s:</strong><br><br><ul>`;
+        // } else {
+        //     content = "<strong>Replies:</strong><br><br><ul>";
+        // }
+        content = `<div class="indented-content">`;
         let rootInfo;
         
         for (const item of items) {
@@ -226,35 +226,55 @@ document.addEventListener('DOMContentLoaded', async () => {
         return content;
     }
     
-    // Main function
     async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, permLink) {
         console.debug("Entered processAllItems");
-        let content = `<b><i>Followed account:</i></b> <a href="${webServerName}/@${account}/posts">${account}</a><br><br>`;
+        let content = `
+        <details class="account-details">
+            <summary class="account-summary"><a href="${webServerName}/@${account}/posts">${account}</a></summary>
+            <div class="account-content">
+        `;
         
         if (postList.length > 0) {
-            console.log("Going into processItems: post");
-            console.dir (postList);
-            content += await processItems(postList, 'post', apiEndpoint, webServerName, accountURL, permLink);
-            content += `<br><br>`;
+            content += `
+                <details class="content-details posts-details">
+                    <summary class="content-summary">Posts (${postList.length})</summary>
+                    <div class="content-inner posts-content">
+                        ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL, permLink)}
+                    </div>
+                </details>
+            `;
         }
         
         if (commentList.length > 0) {
-            console.log("Going into processItems: comment");
-            console.dir (commentList);
-            content += await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL, permLink);
-            content += `<br><br>`;
+            content += `
+                <details class="content-details comments-details">
+                    <summary class="content-summary">Comments (${commentList.length})</summary>
+                    <div class="content-inner comments-content">
+                        ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL, permLink)}
+                    </div>
+                </details>
+            `;
         }
                 
         if (replyList.length > 0) {
-            console.log("Going into processItems: reply");
-            console.dir(replyList);
-            content += await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL, permLink);
+            content += `
+                <details class="content-details replies-details">
+                    <summary class="content-summary">Replies (${replyList.length})</summary>
+                    <div class="content-inner replies-content">
+                        ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL, permLink)}
+                    </div>
+                </details>
+            `;
         }
+        
+        content += `
+            </div>
+        </details>
+        `;
         
         console.debug(`Exiting processAllItems: ${content}`);
         return content;
     }
-
 });
 
 

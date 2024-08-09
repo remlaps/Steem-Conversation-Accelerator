@@ -62,13 +62,66 @@
       max-width: 80vw;
       box-sizing: border-box;
   }
-  
-  .post-box:hover {
-      box-shadow: 0 4px 8px rgba(0,0,0,0.15);
-      transition: box-shadow 0.3s ease-in-out;
-  }
-  
+
   .indented-content {
       margin-left: 20px;
       width: 80%;
   }
+
+  .status-box p {
+    width: 40%;
+    background-color: lightblue;
+  }
+  
+  /*
+  * Nested and collapbsible sections
+  */
+  .account-details {
+    margin-bottom: 15px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
+
+.account-summary {
+    padding: 10px;
+    cursor: pointer;
+    background-color: cyan;
+    /* background-color: #f0f0f0; */
+}
+
+.account-content {
+    padding: 10px;
+}
+
+.content-details {
+    margin-left: 20px;
+    margin-bottom: 10px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+}
+
+.content-summary {
+    padding: 8px;
+    cursor: pointer;
+    background-color: lightgrey;
+    /* background-color: #f8f8f8; */
+}
+
+.content-inner {
+    padding: 10px;
+}
+
+/* SCA Logo location */
+#sca-icon {
+    position: fixed;
+    top: 10px;
+    right: 10px;
+    width: 128px;  /* Adjust size as needed */
+    height: auto;
+    z-index: 1000;  /* Ensures the icon stays on top of other content */
+}
+
+/* Optional: Specific styling for different content types */
+.posts-details { border-color: #ffcccc; }
+.comments-details { border-color: #ccffcc; }
+.replies-details { border-color: #ccccff; }
