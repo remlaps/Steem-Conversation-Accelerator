@@ -8,19 +8,23 @@
 </head>
 <body>
     <div class="container">
-        <header>Header</header>
-        <div class="content">
-            <div class="left-sidebar">Left side</div>
-            <main class="main-content">
-                <h1>New Activity on Steem</h1>
+        <header>
+            <center><h1>Steem Conversation Accelerator (SCA)</h1></center>
+            <center><h2>Conversation at the speed of Steem</h2></center>
+            <div class="indented-content">
                 <p>Activity observed for accounts followed by <span id="steemUsername">Loading...</span> after: <span id="previous-alert-time">Loading...</span></p>
+            </div>
+        </header>
+        <div class="content">
+            <div class="left-sidebar"></div>
+            <main class="main-content">
                 <ul id="accountsList">
                     <!-- Accounts with new activity will be dynamically added here -->
                 </ul>
             </main>
-            <div class="right-sidebar">Right side</div>
+            <div class="right-sidebar"></div>
         </div>
-        <footer>Footer</footer>
+        <footer></footer>
     </div>
     <script src="localStorageUtils.js"></script>
     <script src="activityList.js"></script>

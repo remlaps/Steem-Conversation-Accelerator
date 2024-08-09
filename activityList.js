@@ -7,10 +7,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             let {accountsWithNewActivity, lastNotificationTime, steemUsername} =
                     await chrome.storage.local.get(['accountsWithNewActivity', 'lastNotificationTime', 'steemUsername']);
             const currentCheckTime = new Date().toISOString();
-            const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
+            // const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
 
             // Update HTML content with the previous notification time
-            const previousNotificationTime = lastNotificationTime || 'Not available';
+            // const previousNotificationTime = lastNotificationTime || 'Not available';
 
             const previousAlertTimeField = document.getElementById("previous-alert-time");
             if (previousAlertTimeField) {
