@@ -4,17 +4,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (await acquireLock('activityList', 2)) { // Higher priority
         try {
             console.log(`array lock set in event listener.`);
-            let { accountsWithNewActivity, lastNotificationTime, steemUsername } =
-                await chrome.storage.local.get(['accountsWithNewActivity', 'lastNotificationTime', 'steemUsername']);
+            let { accountsWithNewActivity, lastActivityListPollTime, steemUsername } =
+                await chrome.storage.local.get(['accountsWithNewActivity', 'lastActivityListPollTime', 'steemUsername']);
             const currentCheckTime = new Date().toISOString();
             // const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
 
             // Update HTML content with the previous notification time
-            // const previousNotificationTime = lastNotificationTime || 'Not available';
+            // const previousNotificationTime = lastActivityListPollTime || 'Not available';
 
             const previousAlertTimeField = document.getElementById("previous-alert-time");
             if (previousAlertTimeField) {
-                previousAlertTimeField.textContent = lastNotificationTime;
+                previousAlertTimeField.textContent = lastActivityListPollTime;
             }
 
             const steemUsernameField = document.getElementById("steemUsername");
@@ -22,7 +22,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 steemUsernameField.textContent = steemUsername;
             }
 
-            console.log(`Processing activity for ${steemUsername} after: ${lastNotificationTime}`);
+            console.log(`Processing activity for ${steemUsername} after: ${lastActivityListPollTime}`);
 
 
             // Remove duplicates using a Set and convert back to an Array
@@ -60,8 +60,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.error("Error clearing accounts:", error);
                 });
 
-            await chrome.storage.local.set({ lastNotificationTime: currentCheckTime });
-            console.log(`Updated lastNotificationTime to: ${currentCheckTime}`);
+            await chrome.storage.local.set({ lastActivityListPollTime: currentCheckTime });
+            console.log(`Updated lastActivityListPollTime to: ${currentCheckTime}`);
         } finally {
             await releaseLock("activityList");
             console.log(`array lock cleared in event listener.`);
@@ -226,16 +226,21 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL,
 
 async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, permLink) {
     console.debug("Entered processAllItems");
+
+    if ( postList.length === 0 && commentList.length === 0 && replyList.length === 0 ) {
+        return "";
+    }
+
     let content = `
         <details class="account-details">
-            <summary class="account-summary"><a href="${webServerName}/@${account}/posts">${account}</a></summary>
+            <summary class="account-summary"><a href="${webServerName}/@${account}" target="_blank">${account}</a></summary>
             <div class="account-content">
         `;
 
     if (postList.length > 0) {
         content += `
                 <details class="content-details posts-details">
-                    <summary class="content-summary">Posts (${postList.length})</summary>
+                    <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
                     <div class="content-inner posts-content">
                         ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL, permLink)}
                     </div>
@@ -246,7 +251,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
     if (commentList.length > 0) {
         content += `
                 <details class="content-details comments-details">
-                    <summary class="content-summary">Comments (${commentList.length})</summary>
+                    <summary class="content-summary"><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
                     <div class="content-inner comments-content">
                         ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL, permLink)}
                     </div>
@@ -257,7 +262,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
     if (replyList.length > 0) {
         content += `
                 <details class="content-details replies-details">
-                    <summary class="content-summary">Replies (${replyList.length})</summary>
+                    <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
                     <div class="content-inner replies-content">
                         ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL, permLink)}
                     </div>
