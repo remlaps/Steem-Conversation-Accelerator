@@ -1,7 +1,7 @@
 :root {
-    --altBgColor: #89CFF0; /* Baby Blue */
+    --altBgColor: #d9edf7;
   }
-  
+
   body, html {
       height: 100%;
       margin: 0;
@@ -15,7 +15,7 @@
       height: 100%;
   }
   
-  header, footer {
+  footer {
       height: 15%;
   }
   
@@ -54,12 +54,12 @@
   .post-box {
       border: 1px solid #ccc;
       border-radius: 5px;
-      padding: 15px;
-      margin-bottom: 15px;
-      background-color: #f9f9f9;
+      padding: 5px;
+      margin-bottom: 5px;
+      background-color: #bfd7fa;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      width: 80%;
-      max-width: 80vw;
+      width: 120%;
+      /* max-width: 80vw; */
       box-sizing: border-box;
   }
 
@@ -68,9 +68,41 @@
       width: 80%;
   }
 
+  /* 
+   * Color scheme from Google Gemini
+   */
+
+  /* Target the title-block section */
+.SCA-intro {
+    /* Adjust background color as needed */
+    background-color: #e0dbdb;
+    padding: 20px;
+    text-align: center;
+    /* Center the content horizontally */
+}
+
+/* Style the h1 element with class "title-1" */
+.SCA-intro h1.title-1 {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+    margin-bottom: 10px;
+}
+
+/* Style the h2 element with class "title-2" */
+.SCA-intro h2.title-2 {
+    font-size: 20px;
+    color: #666;
+}
+
+.status-box {
+    padding: 5px; /* Adjust padding as needed */
+    width:60%
+  }
+  
   .status-box p {
-    width: 40%;
-    background-color: lightblue;
+    color: #3004f5; /* Dark grey */
+    font-size: 18;
   }
   
   /*
@@ -85,9 +117,14 @@
 .account-summary {
     padding: 10px;
     cursor: pointer;
-    background-color: cyan;
+    background-color: rgb(45, 45, 235);
+    color: gold;
     /* background-color: #f0f0f0; */
 }
+
+.account-summary a {
+    color: gold;
+  }
 
 .account-content {
     padding: 10px;
@@ -103,8 +140,9 @@
 .content-summary {
     padding: 8px;
     cursor: pointer;
-    background-color: lightgrey;
+    background-color: rgb(215, 225, 225);
     /* background-color: #f8f8f8; */
+    color: royalblue;
 }
 
 .content-inner {
@@ -114,8 +152,8 @@
 /* SCA Logo location */
 #sca-icon {
     position: fixed;
-    top: 10px;
-    right: 10px;
+    top: 5px;
+    right: 5px;
     width: 128px;  /* Adjust size as needed */
     height: auto;
     z-index: 1000;  /* Ensures the icon stays on top of other content */

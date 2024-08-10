@@ -235,11 +235,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
             let newActivityFound = false;
 
-            // console.log(typeof accountsWithNewActivity);
-            // console.dir(accountsWithNewActivity);
             accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
-            // console.log(typeof accountsWithNewActivity);
-            // console.dir(accountsWithNewActivity);
 
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
@@ -301,7 +297,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                             lastCheckedIndex: i,
                             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
                         });
-//                        console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime.toISOString()}.`);
+                       console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime.toISOString()}.`);
                     }
 
                     // Add a small delay to avoid overwhelming the API
