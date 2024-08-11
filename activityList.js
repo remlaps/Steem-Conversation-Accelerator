@@ -7,48 +7,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             console.log(`array lock set in event listener.`);
             let { accountsWithNewActivity, steemObserverName, lastActivityPageViewTime } =
                 await chrome.storage.local.get(['accountsWithNewActivity', 'steemObserverName', 'lastActivityPageViewTime', 'lastActivityPageViewTime']);
-            // const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
 
-            // Update HTML content with the previous notification time
-            // const previousNotificationTime = thisActivityPageViewTime || 'Not available';
-
+            /*
+             *  Set the steem observer account and display it.
+            */
             const steemObserverNameField = document.getElementById("steemObserverName");
             if (steemObserverNameField) {
                 steemObserverNameField.textContent = steemObserverName;
             }
 
-            console.log(`Processing activity for ${steemObserverName} after: ${thisActivityPageViewTime}`);
+            // console.log(`Processing activity for ${steemObserverName} after: ${thisActivityPageViewTime}`);
+
+            /*
+             * Display the last displayed time.
+             */
             const previousAlertTimeField = document.getElementById("previous-alert-time");
             if (previousAlertTimeField) {
                 previousAlertTimeField.textContent = lastActivityPageViewTime;
             }
 
-            // Remove duplicates using a Set and convert back to an Array
-            console.log(`accountsWithNewAcitivty before splitting: ${accountsWithNewActivity}`);
-            accountsWithNewActivity = JSON.parse(accountsWithNewActivity);   // Convert JSON string to array
-            let uniqueAccountsWithNewActivity = Object.values(accountsWithNewActivity.reduce((activityRecord, item) => {
-                if (!activityRecord[item.account]) {
-                    // If this account hasn't been seen before, initialize it
-                    activityRecord[item.account] = {
-                        account: item.account,
-                        activityTime: item.activityTime,
-                        lastDisplayTime: item.lastDisplayTime
-                    };
-                } else {
-                    // If we've seen this account before, update the times if necessary
-                    activityRecord[item.account].activityTime =
-                        newerDate(activityRecord[item.account].activityTime, item.activityTime);
-                    activityRecord[item.account].lastDisplayTime =
-                        newerDate(activityRecord[item.account].lastDisplayTime, item.lastDisplayTime);
-                }
-                return activityRecord;
-            }, {}));
+            // console.log(`accountsWithNewAcitivty before splitting: ${accountsWithNewActivity}`);
+            const uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
             const listSize = uniqueAccountsWithNewActivity.length;
             const accountsList = document.getElementById('accountsList');
-
             await updateAccountsList(uniqueAccountsWithNewActivity);
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
+            // There's almost certainly a race condition with background.js here, but I am too tired to think about it ATM.
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
                 .then(() => {
                     console.log("Accounts with new activity successfully saved!");
@@ -70,70 +55,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.body.style.backgroundColor = getComputedStyle(document.documentElement)
         .getPropertyValue('--altBgColor').trim();
 
-});
+}); // End of document.addEventListener()
 
+/*
+ * Create the HTML for the posts, replies,a nd comments.
+ */
 async function updateAccountsList(uniqueAccountsWithNewActivity) {
     if (uniqueAccountsWithNewActivity.length === 0) {
-        /*
-         * activity list is empty.  Update HTML
-         */
+        accountsList.innerHTML = '<li>No new activity detected.</li>';
+        return;
+    }
+
+    const apiEndpoint = await getApiServerName();
+    const webServerName = await getWebServerName();
+
+    for (const account of uniqueAccountsWithNewActivity) {
+        console.log(`Processing account: ${account.account}`);
+        
+        await updateLock("activityList");
         const listItem = document.createElement('li');
-        // listItem.textContent = 'No new activity detected.';
-        listItem.innerHTML = 'No new activity detected.';
-        accountsList.appendChild(listItem);
-    } else {
-        /*
-         * Some activity was observed.  Show it in HTML.
-         */
-        const apiEndpoint = await getApiServerName();
+        const accountURL = `${webServerName}/@${account.account}`;
 
-        for (const accountTriplet of uniqueAccountsWithNewActivity) {
-            console.log(`Account: ${accountTriplet.account}`);
-            console.log(`Newest Activity Time: ${new Date(accountTriplet.activityTime).toString()}`);
-            console.log(`Newest Display Time: ${new Date(accountTriplet.lastDisplayTime).toString()}`);
-            console.log('-------------------');
-            console.log("Before checks: ");
-            showTriplet(accountTriplet);
-
-            await updateLock("activityList");
-            const listItem = document.createElement('li');
-            const webServerName = await getWebServerName();
-            const account = accountTriplet.account;
-            const lastActivityTime = accountTriplet.activityTime;
-            const firstActivityTime = lastActivityTime;
-            const lastDisplayTime = accountTriplet.lastDisplayTime;
-            const accountURL = `${webServerName}/@${account}`;
-
-            try {
-                console.log(`account: ${account}, startTime: ${lastDisplayTime}, api Endpoint: ${apiEndpoint} - before getAccountActivities`);
-                const { postList, commentList, replyList } = await getAccountActivities(account, lastDisplayTime, apiEndpoint);
-
-                // Create the HTML content for the account
-                // let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
-                // let content = `<a href="${accountURL}" target="_blank">${account}</a><br>`;
-
-                console.debug("Entering processAllItems.");
-                const content = await processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL);
-                console.debug("Exited processAllItems.");
-                listItem.innerHTML = content;
-            } catch (error) {
-                console.warn(`Error fetching activities for account ${account}:`, error);
-                listItem.textContent = `Error fetching activities for account ${account}`;
-                continue;
-            }
-
-            accountsList.appendChild(listItem);
-            const uniqueAccountIndex = uniqueAccountsWithNewActivity.findIndex(item => item.account === account);
-            if (uniqueAccountIndex === -1) {
-                // account not found in the list
-                // this should never happen
-            } else {
-                accountTriplet.lastDisplayTime = firstActivityTime;
-                uniqueAccountsWithNewActivity[uniqueAccountIndex] = accountTriplet;
-            }
-            console.log("After checks: ");
-            showTriplet(accountTriplet);
+        try {
+            const activities = await getAccountActivities(account.account, account.lastDisplayTime, apiEndpoint);
+            const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL);
+            listItem.innerHTML = content;
+        } catch (error) {
+            console.warn(`Error fetching activities for account ${account.account}:`, error);
+            listItem.textContent = `Error fetching activities for account ${account.account}`;
+            continue;
         }
+
+        accountsList.appendChild(listItem);
+        account.lastDisplayTime = account.activityTime;
     }
 }
 
@@ -224,7 +178,7 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL,
 async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, permLink) {
     console.debug("Entered processAllItems");
 
-    if ( postList.length === 0 && commentList.length === 0 && replyList.length === 0 ) {
+    if (postList.length === 0 && commentList.length === 0 && replyList.length === 0) {
         return "";
     }
 
@@ -461,4 +415,23 @@ function showTriplet(showAccount) {
     console.log(`Steem account: ${showAccount.account}`);
     console.log(`Last activity: ${showAccount.activityTime}`);
     console.log(`Last display: ${showAccount.lastDisplayTime}`);
+}
+
+/*
+ * Remove duplicates using a Set and convert back to an Array
+ */
+function filterUniqueAccounts(accountsWithNewActivity) {
+    const parsedAccounts = JSON.parse(accountsWithNewActivity);
+    
+    const uniqueAccounts = parsedAccounts.reduce((acc, item) => {
+        if (!acc[item.account]) {
+            acc[item.account] = item;
+        } else {
+            acc[item.account].activityTime = newerDate(acc[item.account].activityTime, item.activityTime);
+            acc[item.account].lastDisplayTime = newerDate(acc[item.account].lastDisplayTime, item.lastDisplayTime);
+        }
+        return acc;
+    }, {});
+
+    return Object.values(uniqueAccounts);
 }
