@@ -28,11 +28,11 @@ async function getWebServerName() {
 
 function getStoredUser() {
     return new Promise((resolve, reject) => {
-        chrome.storage.local.get(['steemUsername'], function (result) {
+        chrome.storage.local.get(['steemObserverName'], function (result) {
             if (chrome.runtime.lastError) {
                 reject(chrome.runtime.lastError);
             } else {
-                resolve(result.steemUsername);
+                resolve(result.steemObserverName);
             }
         });
     });

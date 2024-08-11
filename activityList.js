@@ -1,12 +1,12 @@
 /* global chrome */
 
 document.addEventListener('DOMContentLoaded', async () => {
+    const currentCheckTime = new Date().toISOString();
     if (await acquireLock('activityList', 2)) { // Higher priority
         try {
             console.log(`array lock set in event listener.`);
-            let { accountsWithNewActivity, lastActivityListPollTime, steemUsername } =
-                await chrome.storage.local.get(['accountsWithNewActivity', 'lastActivityListPollTime', 'steemUsername']);
-            const currentCheckTime = new Date().toISOString();
+            let { accountsWithNewActivity, lastActivityListPollTime, steemObserverName } =
+                await chrome.storage.local.get(['accountsWithNewActivity', 'lastActivityListPollTime', 'steemObserverName']);
             // const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
 
             // Update HTML content with the previous notification time
@@ -17,12 +17,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 previousAlertTimeField.textContent = lastActivityListPollTime;
             }
 
-            const steemUsernameField = document.getElementById("steemUsername");
-            if (steemUsernameField) {
-                steemUsernameField.textContent = steemUsername;
+            const steemObserverNameField = document.getElementById("steemObserverName");
+            if (steemObserverNameField) {
+                steemObserverNameField.textContent = steemObserverName;
             }
 
-            console.log(`Processing activity for ${steemUsername} after: ${lastActivityListPollTime}`);
+            console.log(`Processing activity for ${steemObserverName} after: ${lastActivityListPollTime}`);
 
 
             // Remove duplicates using a Set and convert back to an Array
@@ -59,10 +59,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 .catch(error => {
                     console.error("Error clearing accounts:", error);
                 });
-
+        } finally {
             await chrome.storage.local.set({ lastActivityListPollTime: currentCheckTime });
             console.log(`Updated lastActivityListPollTime to: ${currentCheckTime}`);
-        } finally {
             await releaseLock("activityList");
             console.log(`array lock cleared in event listener.`);
         }

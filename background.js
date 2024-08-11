@@ -31,22 +31,22 @@ chrome.runtime.onInstalled.addListener(function (details) {
             width: 600,
             height: 800
         });
-        // console.log(`plugin installed at ${pluginStartTime}`);
-    // } else if (details.reason === 'update') {
-        // console.log(`plugin updated at ${pluginStartTime}`);
+        console.log(`plugin installed at ${pluginStartTime}`);
+    } else if (details.reason === 'update') {
+        console.log(`plugin updated at ${pluginStartTime}`);
     }
-    chrome.storage.local.get(['steemUsername'], async (result) => {
-        const steemUsername = result.steemUsername;
-        if (steemUsername) {
+    chrome.storage.local.get(['steemObserverName'], async (result) => {
+        const steemObserverName = result.steemObserverName;
+        if (steemObserverName) {
             // Reinitialize.  This should probably only happen when the plugin was reloaded.  Not when it was installed.
             await saveIsCheckingActivity(false);
-            await checkForNewActivitySinceLastNotification(steemUsername);
+            await checkForNewActivitySinceLastNotification(steemObserverName);
             await setupAlarms();
         } else {
-            // console.log('Steem username not set for SCA. Please set it in the extension settings.');
+            console.log('Steem username not set for SCA. Please set it in the extension settings.');
         }
     });
-    // showAlarms();
+    showAlarms();
 });
 
 /*
@@ -54,7 +54,7 @@ chrome.runtime.onInstalled.addListener(function (details) {
  */
 chrome.storage.onChanged.addListener((changes, area) => {
     // Reset if changes were observed with the stored username or polling intervals.
-    if (area === 'local' && ('steemUserName' in changes || 'pollingTime' in changes)) {
+    if (area === 'local' && ('steemObserverName' in changes || 'pollingTime' in changes)) {
         // console.log('Changes observed:', JSON.stringify(changes, null, 2));
         clearAlarms();
         setupAlarms();
@@ -83,10 +83,10 @@ chrome.idle.onStateChanged.addListener(state => {
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'checkSteemActivity') {
         // console.log("Alarm recieved.");
-        chrome.storage.local.get(['steemUsername'], async (result) => {
-            const steemUsername = result.steemUsername;
-            if (steemUsername) {
-                await checkForNewActivitySinceLastNotification(steemUsername);
+        chrome.storage.local.get(['steemObserverName'], async (result) => {
+            const steemObserverName = result.steemObserverName;
+            if (steemObserverName) {
+                await checkForNewActivitySinceLastNotification(steemObserverName);
             // } else {
                 // console.log('Alarm triggered, but the Steem username is not set in SCA.');
                 // console.log('Please set it in the extension settings.');
@@ -106,11 +106,11 @@ chrome.alarms.onAlarm.addListener((alarm) => {
  */
 function clearAlarms() {
     chrome.alarms.clear('checkSteemActivity', wasCleared => {
-        // if (wasCleared) {
-        //     console.log('Alarm "checkSteemActivity" cleared successfully.');
-        // } else {
-        //     console.log('Alarm "checkSteemActivity" not found or could not be cleared.');
-        // }
+        if (wasCleared) {
+            console.log('Alarm "checkSteemActivity" cleared successfully.');
+        } else {
+            console.log('Alarm "checkSteemActivity" not found or could not be cleared.');
+        }
     });
 }
 
@@ -182,24 +182,24 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
 }
 }
 
-async function getFollowingListWithRetry(steemUsername, apiNode, retries = 5) {
+async function getFollowingListWithRetry(steemObserverName, apiNode, retries = 5) {
     while (retries > 0) {
         try {
-            const followingList = await getFollowingList(steemUsername, apiNode);
+            const followingList = await getFollowingList(steemObserverName, apiNode);
             // Clear the stored progress after successful completion
             await chrome.storage.local.remove(['lastFetchedUser', 'partialFollowingList']);
             return followingList;
         } catch (error) {
             retries--;
-            console.warn(`Failed to get following list for ${steemUsername}. Retrying in 1 second.`);
+            console.warn(`Failed to get following list for ${steemObserverName}. Retrying in 1 second.`);
             await new Promise(resolve => setTimeout(resolve, 1000));
         }
     }
-    console.error(`Retry limit exceeded. Failed to get following list. Skipping ${steemUsername}...`);
+    console.error(`Retry limit exceeded. Failed to get following list. Skipping ${steemObserverName}...`);
     return [];
 }
 
-async function checkForNewActivitySinceLastNotification(steemUsername) {
+async function checkForNewActivitySinceLastNotification(steemObserverName) {
     let isCheckingActivity = await getIsCheckingActivity();
     if (isCheckingActivity) {
         // console.log('checkForNewActivitySinceLastNotification is already running.');
@@ -208,21 +208,22 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
     isCheckingActivity = true;
     await saveIsCheckingActivity(isCheckingActivity);
     if (await acquireLock('background', 1)) { // Lower priority
-        // console.log(`array lock set in checkForNewActivitySinceLastNotification ${steemUsername}.`);
+        // console.log(`array lock set in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
         try {
 
 
             // Retrieve stored progress
-            let {lastAlertTime, lastBackgroundPollTime, accountsWithNewActivity, lastCheckedIndex} =
-                    await chrome.storage.local.get(['lastAlertTime', 'lastBackgroundPollTime', 'accountsWithNewActivity', 'lastCheckedIndex']);
+            let {lastAlertTime, lastActivityListPollTime, accountsWithNewActivity, lastCheckedIndex} =
+                    await chrome.storage.local.get(['lastAlertTime', 'lastActivityListPollTime', 'accountsWithNewActivity', 'lastCheckedIndex']);
 
             const currentCheckTime = new Date().toISOString();
             const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-            if (!lastBackgroundPollTime) {
-                await chrome.storage.local.set({lastBackgroundPollTime: fifteenMinutesAgo});
+            if (lastActivityListPollTime) {
+                await chrome.storage.local.set({'lastBackgroundPollTime': lastActivityListPollTime});
             } else {
-                await chrome.storage.local.set({lastBackgroundPollTime: lastAlertTime});
+                await chrome.storage.local.set({'lastBackgroundPollTime': fifteenMinutesAgo});
             }
+            lastBackgroundPollTime = lastActivityListPollTime;
 
             // Initialize lastAlertTime if it doesn't exist
             lastAlertTime = lastAlertTime || fifteenMinutesAgo;
@@ -242,9 +243,9 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
 
             // console.log(`Resuming check from index ${lastCheckedIndex}`);
 
-            steemUsername = await getStoredUser();
+            steemObserverName = await getStoredUser();
             apiNode = await getApiServerName();
-            const followingList = await getFollowingListWithRetry(steemUsername, apiNode);
+            const followingList = await getFollowingListWithRetry(steemObserverName, apiNode);
             let newActivityFound = false;
 
             accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
@@ -253,7 +254,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                 const followedAccount = followingList[i];
                 try {
                     let sT = new Date(checkStartTime);
-                    const existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
+                    let existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                     if (existingAccountIndex !== -1) {
                         sT = new Date(accountsWithNewActivity[existingAccountIndex].lastDisplayTime);
                     }
@@ -265,7 +266,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                     }
                     const cT = new Date(`${currentActivityTime}`);
 
-//                    console.debug(`Comparing ${sT.toISOString()} and ${cT.toISOString()} for user ${followedAccount}.`);
+                   console.debug(`Comparing ${sT.toISOString()} and ${cT.toISOString()} for user ${followedAccount}.`);
                     if (sT < cT) {
                         newActivityFound = true;
                         // First, check if the account already exists in accountsWithNewActivity
@@ -288,11 +289,12 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
                         }
 //                        console.debug("Saved account.");
                     } else {
+                        existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                         if (existingAccountIndex !== -1) {
                             accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
-//                            console.debug("Deleted account");
+                             console.debug(`Deleted account: ${followedAccount}`);
                         } else {
-//                            console.debug("Account not in list.");
+                             console.debug(`Account not in list: ${followedAccount}.`);
                         }
                     }
 
@@ -352,7 +354,7 @@ async function checkForNewActivitySinceLastNotification(steemUsername) {
             console.error('Error checking for new activity since last alert:', error);
         } finally {
             await releaseLock();
-            // console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemUsername}.`);
+            // console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
         }
     } else {
         // console.log('Could not acquire lock in background.js, will try again later');
@@ -418,7 +420,7 @@ async function deleteNoFollows(followList, activityTriplets) {
     return newActivityTriplets;
 }
 
-async function getFollowingList(steemUsername, apiNode, limit = 100) {
+async function getFollowingList(steemObserverName, apiNode, limit = 100) {
     let followingList = [];
     let start = null;
 
@@ -431,7 +433,7 @@ async function getFollowingList(steemUsername, apiNode, limit = 100) {
     }
 
     try {
-        // console.log(`Retrieving follower list for ${steemUsername} from: ${apiNode}`);
+        // console.log(`Retrieving follower list for ${steemObserverName} from: ${apiNode}`);
         do {
             // Reset data before each request
             let data;
@@ -443,7 +445,7 @@ async function getFollowingList(steemUsername, apiNode, limit = 100) {
                 body: JSON.stringify({
                     jsonrpc: '2.0',
                     method: 'condenser_api.get_following',
-                    params: [steemUsername, start, 'blog', limit],
+                    params: [steemObserverName, start, 'blog', limit],
                     id: 1
                 })
             });
