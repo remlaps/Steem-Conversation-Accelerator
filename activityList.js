@@ -1,29 +1,27 @@
 /* global chrome */
 
 document.addEventListener('DOMContentLoaded', async () => {
-    const currentCheckTime = new Date().toISOString();
+    const thisActivityPageViewTime = new Date().toISOString();
     if (await acquireLock('activityList', 2)) { // Higher priority
         try {
             console.log(`array lock set in event listener.`);
-            let { accountsWithNewActivity, lastActivityListPollTime, steemObserverName } =
-                await chrome.storage.local.get(['accountsWithNewActivity', 'lastActivityListPollTime', 'steemObserverName']);
+            let { accountsWithNewActivity, steemObserverName, lastActivityPageViewTime } =
+                await chrome.storage.local.get(['accountsWithNewActivity', 'steemObserverName', 'lastActivityPageViewTime', 'lastActivityPageViewTime']);
             // const accountsFromBackground = JSON.parse(accountsWithNewActivity || '[]');
 
             // Update HTML content with the previous notification time
-            // const previousNotificationTime = lastActivityListPollTime || 'Not available';
-
-            const previousAlertTimeField = document.getElementById("previous-alert-time");
-            if (previousAlertTimeField) {
-                previousAlertTimeField.textContent = lastActivityListPollTime;
-            }
+            // const previousNotificationTime = thisActivityPageViewTime || 'Not available';
 
             const steemObserverNameField = document.getElementById("steemObserverName");
             if (steemObserverNameField) {
                 steemObserverNameField.textContent = steemObserverName;
             }
 
-            console.log(`Processing activity for ${steemObserverName} after: ${lastActivityListPollTime}`);
-
+            console.log(`Processing activity for ${steemObserverName} after: ${thisActivityPageViewTime}`);
+            const previousAlertTimeField = document.getElementById("previous-alert-time");
+            if (previousAlertTimeField) {
+                previousAlertTimeField.textContent = lastActivityPageViewTime;
+            }
 
             // Remove duplicates using a Set and convert back to an Array
             console.log(`accountsWithNewAcitivty before splitting: ${accountsWithNewActivity}`);
@@ -60,8 +58,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.error("Error clearing accounts:", error);
                 });
         } finally {
-            await chrome.storage.local.set({ lastActivityListPollTime: currentCheckTime });
-            console.log(`Updated lastActivityListPollTime to: ${currentCheckTime}`);
+            await chrome.storage.local.set({ 'lastActivityPageViewTime': thisActivityPageViewTime });
+            console.log(`Updated lastActivityPageViewTime to: ${thisActivityPageViewTime}`);
             await releaseLock("activityList");
             console.log(`array lock cleared in event listener.`);
         }

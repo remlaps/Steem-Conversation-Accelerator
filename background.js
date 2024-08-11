@@ -147,18 +147,14 @@ function showAlarms() {
  * Delete an account from the list of {account, lastActivityTime, lastDisplayTime} triplets.
  */
 function deleteTriplet(accountTriplets, accountToDelete) {
-    const newAccounts = accountTriplets.filter(item => {
-        const keepItem = item.accountTriplets !== accountToDelete;
-        return keepItem;
-    });
-    return newAccounts;
+    return accountTriplets.filter(item => item.account !== accountToDelete);
 }
 
 async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 5) {
     try {
-        const currentActivityTime = await getActivityTime(followedAccount, apiNode, startTime);
-        if (currentActivityTime !== null) {
-            return currentActivityTime;
+        const lastAccountActivityObserved = await getActivityTime(followedAccount, apiNode, startTime);
+        if (lastAccountActivityObserved !== null) {
+            return lastAccountActivityObserved;
         } else {
             console.warn(`Failed to get activity time for ${followedAccount}. Retrying in 1 second... (${retries} retries left)`);
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
@@ -213,26 +209,25 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
 
 
             // Retrieve stored progress
-            let {lastAlertTime, lastActivityListPollTime, accountsWithNewActivity, lastCheckedIndex} =
-                    await chrome.storage.local.get(['lastAlertTime', 'lastActivityListPollTime', 'accountsWithNewActivity', 'lastCheckedIndex']);
+            let {lastAlertTime, lastBackgroundPollTime, lastActivityPageViewTime, accountsWithNewActivity, lastCheckedIndex} =
+                    await chrome.storage.local.get(['lastAlertTime', 'lastBackgroundPollTime', 'lastActivityPageViewTime',
+                        'accountsWithNewActivity', 'lastCheckedIndex']);
 
             const currentCheckTime = new Date().toISOString();
             const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
-            if (lastActivityListPollTime) {
-                await chrome.storage.local.set({'lastBackgroundPollTime': lastActivityListPollTime});
-            } else {
-                await chrome.storage.local.set({'lastBackgroundPollTime': fifteenMinutesAgo});
-            }
-            lastBackgroundPollTime = lastActivityListPollTime;
+            await chrome.storage.local.set({'lastBackgroundPollTime': currentCheckTime});
 
-            // Initialize lastAlertTime if it doesn't exist
+
+            // Initialize times if they're empty
             lastAlertTime = lastAlertTime || fifteenMinutesAgo;
+            lastBackgroundPollTime = lastBackgroundPollTime || fifteenMinutesAgo;
+            if ( ! lastActivityPageViewTime ) {
+                lastActivityPageViewTime = fifteenMinutesAgo;
+                await chrome.storage.local.set({'lastActivityPageViewTime': lastActivityPageViewTime});
+            } 
 
-            // Initialize lastBackgroundPollTime if it doesn't exist
-            lastBackgroundPollTime = lastBackgroundPollTime || lastAlertTime;
-
-            // Use the more recent of lastBackgroundPollTime and fifteenMinutesAgo as the start time for checking
-            const checkStartTime = new Date(Math.max(new Date(lastBackgroundPollTime), new Date(fifteenMinutesAgo))).toISOString();
+            // Start checks when the activity page was last viewed, or 15 minutes ago.
+            const checkStartTime = lastActivityPageViewTime;
 
             // console.log(`Last alert time: ${lastAlertTime}`);
             // console.log(`Last notification time: ${lastBackgroundPollTime}`);
@@ -253,48 +248,54 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
                 try {
-                    let sT = new Date(checkStartTime);
+                    let searchMin = new Date(checkStartTime); // Default in case there is no history for this time.
                     let existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                     if (existingAccountIndex !== -1) {
-                        sT = new Date(accountsWithNewActivity[existingAccountIndex].lastDisplayTime);
+                        // Update existing accounts with their lastDisplayTime values.
+                        searchMin = new Date(accountsWithNewActivity[existingAccountIndex].lastDisplayTime);
                     }
 
-                    const currentActivityTime = await getActivityTimeWithRetry(followedAccount, apiNode, sT);
-                    if (currentActivityTime === null) {
+                    // Get the most recent post/comment/reply activity
+                    const lastAccountActivityObserved = await getActivityTimeWithRetry(followedAccount, apiNode, searchMin);
+                    if (lastAccountActivityObserved === null) {
                         console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
                         continue;
                     }
-                    const cT = new Date(`${currentActivityTime}`);
+                    // const cT = new Date(`${lastAccountActivityObserved}`);
 
-                   console.debug(`Comparing ${sT.toISOString()} and ${cT.toISOString()} for user ${followedAccount}.`);
-                    if (sT < cT) {
+                    // console.debug(`Comparing ${searchMin.toISOString()} and ${lastAccountActivityObserved.toISOString()} for user ${followedAccount}.`);
+                    if (new Date (searchMin) < new Date (lastAccountActivityObserved)) {
+                        // Activity observed after last notification
                         newActivityFound = true;
                         // First, check if the account already exists in accountsWithNewActivity
                         if (existingAccountIndex === -1) {
                             // The account doesn't exist in the array yet
-//                            const currentActivityTimeDate = new Date(currentActivityTime);
-                            const oneSecondBefore = new Date(currentActivityTime.getTime() - 1000);
+                            // const lastAccountActivityObservedDate = new Date(lastAccountActivityObserved);
+                            const oneSecondBefore = new Date(lastAccountActivityObserved.getTime() - 1000);
                             const newActivity = {
                                 account: followedAccount,
-                                activityTime: currentActivityTime,
+                                activityTime: lastAccountActivityObserved,
                                 lastDisplayTime: oneSecondBefore // .toISOString() // or whatever format you prefer
                             };
                             accountsWithNewActivity.push(newActivity);
                         } else {
                             // The account already exists, update its activityTime and keep the existing lastDisplayTime
                             const existingAccount = accountsWithNewActivity[existingAccountIndex];
-                            existingAccount.activityTime = currentActivityTime;
+                            existingAccount.activityTime = lastAccountActivityObserved;
                             accountsWithNewActivity[existingAccountIndex] = existingAccount;
                             // lastDisplayTime remains unchanged
                         }
 //                        console.debug("Saved account.");
                     } else {
+                        // Covered under previous notification.
                         existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                         if (existingAccountIndex !== -1) {
+                            // console.debug(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
                             accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
-                             console.debug(`Deleted account: ${followedAccount}`);
-                        } else {
-                             console.debug(`Account not in list: ${followedAccount}.`);
+                            // console.debug(`Deleted account: ${followedAccount}`);
+                            // console.debug(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
+                        // } else {
+                        //      console.debug(`Account not in list: ${followedAccount}.`);
                         }
                     }
 
@@ -310,7 +311,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                             lastCheckedIndex: i,
                             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
                         });
-                    //    console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${currentActivityTime.toISOString()}.`);
+                    //    console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${lastAccountActivityObserved.toISOString()}.`);
                     }
 
                     // Add a small delay to avoid overwhelming the API
