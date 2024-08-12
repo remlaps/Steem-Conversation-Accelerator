@@ -41,7 +41,7 @@ chrome.runtime.onInstalled.addListener(function (details) {
             // Reinitialize.  This should probably only happen when the plugin was reloaded.  Not when it was installed.
             await saveIsCheckingActivity(false);
             await checkForNewActivitySinceLastNotification(steemObserverName);
-            await setupAlarms();
+            setupAlarms();
         } else {
             console.log('Steem username not set for SCA. Please set it in the extension settings.');
         }
@@ -58,7 +58,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
         // console.log('Changes observed:', JSON.stringify(changes, null, 2));
         clearAlarms();
         setupAlarms();
-        // showAlarms();
+        showAlarms();
     }
 });
 
@@ -263,7 +263,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     }
                     // const cT = new Date(`${lastAccountActivityObserved}`);
 
-                    // console.debug(`Comparing ${searchMin.toISOString()} and ${lastAccountActivityObserved.toISOString()} for user ${followedAccount}.`);
+                    console.debug(`Comparing ${searchMin.toISOString()} and ${lastAccountActivityObserved.toISOString()} for user ${followedAccount}.`);
                     if (new Date (searchMin) < new Date (lastAccountActivityObserved)) {
                         // Activity observed after last notification
                         newActivityFound = true;
@@ -487,58 +487,137 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100) {
     }
 }
 
+// async function getActivityTime(user, apiNode, startTime) {
+//     //    console.log(`Getting account history for ${user} from ${startTime} until now.`);
+//     try {
+//         let lastTransaction = -1;
+//         const transactionCount = 0;
+//         const limit = 1;
+//         const maxTransactions = 100;
+
+//         while (transactionCount < maxTransactions) {
+//             const postData = JSON.stringify({
+//                 jsonrpc: '2.0',
+//                 method: 'condenser_api.get_account_history',
+//                 params: [user, lastTransaction, limit], // Keep fetching one at a time as in original
+//                 id: 1
+//             });
+
+//             // console.log(`Fetching data for ${user}, transaction: ${lastTransaction}`);
+//             const loopStartTime = new Date();
+
+//             try {
+//                 const response = await fetch(apiNode, {
+//                     keepalive: true,
+//                     method: 'POST',
+//                     headers: {
+//                         'Content-Type': 'application/json'
+//                     },
+//                     body: postData
+//                 });
+
+//                 if (!response.ok) {
+//                     const errorText = await response.text();
+//                     console.error(`Response not OK when Fetching data for ${user}: ${response.status} ${errorText}`);
+//                     return null;
+//                 }
+
+//                 const data = await response.json();
+
+//                 if (data.error) {
+//                     // warn for single attempt, error in calling routine after retries.
+//                     console.warn(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
+//                     return null;
+//                 }
+
+//                 if (!data.result || data.result.length < 1 || data.result[0].length < 2 || data.result[0][1].timestamp.length === 0) {
+//                     // console.log(`No recent activity found for ${user}`);
+//                     return null;
+//                 }
+
+//                 const [transId, transaction] = data.result[0];
+//                 const {timestamp, op} = transaction;
+//                 const [opType] = op;
+
+//                 // console.log(`Transaction: ${transId}, Operation: ${opType}, Timestamp: ${timestamp}`);
+
+//                 if (opType === 'comment') {
+//                     return new Date(`${timestamp}Z`);
+//                 }
+
+//                 if (new Date(startTime) > new Date(`${timestamp}Z`)) {
+//                     return new Date("1970-01-01T00:00:00Z");
+//                 }
+
+//                 lastTransaction = transId - 1;
+//                 transactionCount++;
+
+//                 if (transactionCount >= maxTransactions) {
+//                     // console.log(`Processed ${maxTransactions} transactions: at ${lastTransaction} for ${user}. Bailing out.`);
+//                     return new Date("1970-01-01T00:00:00Z");
+//                 }
+
+//                 const loopEndTime = new Date();
+//                 // console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
+
+//             } catch (fetchError) {
+//                 // warn for single attempt, error in calling routine after retries.
+//                 console.warn(`Fetch error for ${user}:`, fetchError);
+//                 return null;
+//             }
+//         }
+
+//         // console.log(`No comment found within ${maxTransactions} transactions for ${user}`);
+//         return new Date("1970-01-01T00:00:00Z");
+
+//     } catch (error) {
+//         // warn for single attempt, error in calling routine after retries.
+//         console.warn(`Unexpected error for ${user}:`, error);
+//         return null;
+//     }
+// }
+
 async function getActivityTime(user, apiNode, startTime) {
-    //    console.log(`Getting account history for ${user} from ${startTime} until now.`);
     try {
         let lastTransaction = -1;
-        let transactionCount = 0;
-        const maxTransactions = 100;
+        const chunkSize = 20;
+        const maxChunks = 5; // This will check up to 100 transactions (5 * 20)
 
-        while (transactionCount < maxTransactions) {
+        for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
             const postData = JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'condenser_api.get_account_history',
-                params: [user, lastTransaction, 1], // Keep fetching one at a time as in original
+                params: [user, lastTransaction, chunkSize],
                 id: 1
             });
 
-            // console.log(`Fetching data for ${user}, transaction: ${lastTransaction}`);
-            const loopStartTime = new Date();
+            const response = await fetch(apiNode, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: postData
+            });
 
-            try {
-                const response = await fetch(apiNode, {
-                    keepalive: true,
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: postData
-                });
+            if (!response.ok) {
+                console.error(`Error fetching data for ${user}: ${response.status}`);
+                return null;
+            }
 
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error(`Response not OK when Fetching data for ${user}: ${response.status} ${errorText}`);
-                    return null;
-                }
+            const data = await response.json();
 
-                const data = await response.json();
+            if (data.error) {
+                console.warn(`Data error for ${user}: ${data.error.message}`);
+                return null;
+            }
 
-                if (data.error) {
-                    // warn for single attempt, error in calling routine after retries.
-                    console.warn(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
-                    return null;
-                }
+            if (!data.result || data.result.length === 0) {
+                return null;
+            }
 
-                if (!data.result || data.result.length < 1 || data.result[0].length < 2 || data.result[0][1].timestamp.length === 0) {
-                    // console.log(`No recent activity found for ${user}`);
-                    return null;
-                }
-
-                const [transId, transaction] = data.result[0];
+            // Iterate through the transactions in reverse order (most recent first)
+            for (let i = data.result.length - 1; i >= 0; i--) {
+                const [transId, transaction] = data.result[i];
                 const {timestamp, op} = transaction;
                 const [opType] = op;
-
-                // console.log(`Transaction: ${transId}, Operation: ${opType}, Timestamp: ${timestamp}`);
 
                 if (opType === 'comment') {
                     return new Date(`${timestamp}Z`);
@@ -549,29 +628,13 @@ async function getActivityTime(user, apiNode, startTime) {
                 }
 
                 lastTransaction = transId - 1;
-                transactionCount++;
-
-                if (transactionCount >= maxTransactions) {
-                    // console.log(`Processed ${maxTransactions} transactions: at ${lastTransaction} for ${user}. Bailing out.`);
-                    return new Date("1970-01-01T00:00:00Z");
-                }
-
-                const loopEndTime = new Date();
-                // console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
-
-            } catch (fetchError) {
-                // warn for single attempt, error in calling routine after retries.
-                console.warn(`Fetch error for ${user}:`, fetchError);
-                return null;
             }
         }
 
-        // console.log(`No comment found within ${maxTransactions} transactions for ${user}`);
         return new Date("1970-01-01T00:00:00Z");
 
     } catch (error) {
-        // warn for single attempt, error in calling routine after retries.
-        console.warn(`Unexpected error for ${user}:`, error);
+        console.warn(`Error for ${user}:`, error);
         return null;
     }
 }

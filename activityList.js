@@ -142,11 +142,6 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
 async function processItems(items, type, apiEndpoint, webServerName, accountURL, permLink) {
     console.debug(`Entered processItems: ${type}`);
     let content;
-    // if ( type !== "reply" ) {
-    //    content = `<strong>${type.charAt(0).toUpperCase() + type.slice(1)}s:</strong><br><br><ul>`;
-    // } else {
-    //     content = "<strong>Replies:</strong><br><br><ul>";
-    // }
     content = `<div class="indented-content">`;
     let rootInfo;
 
@@ -171,7 +166,8 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL,
     }
 
     content += `</ul></div>`;
-    console.debug(`Exiting processItems, type: ${type}, content: ${content}`);
+    // console.debug(`Exiting processItems, type: ${type}, content: ${content}`);
+    console.debug(`Exiting processItems, type: ${type}`);
     return content;
 }
 
@@ -281,14 +277,106 @@ async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity) 
     });
 }
 
+// async function getAccountActivities(account, startTime, apiEndpoint) {
+//     const startTimeStamp = new Date(startTime).getTime();
+//     let allActivities = [];  // Initialize an empty array to store activities
+//     let postList = [];    // Initialize list of posts
+//     let commentList = []; // Initialize list of comments
+//     let replyList = [];   // Initialize list of replies
+
+//     async function FetchAccountHistoryWithRetry(account, index, apiEndpoint, retries = 5) {
+//         while (retries > 0) {
+//             try {
+//                 const response = await fetch(apiEndpoint, {
+//                     method: 'POST',
+//                     headers: { 'Content-Type': 'application/json' },
+//                     body: JSON.stringify({
+//                         jsonrpc: "2.0",
+//                         method: "condenser_api.get_account_history",
+//                         params: [account, index, 0],
+//                         id: 1
+//                     })
+//                 });
+
+//                 jsonResponse = await response.json();
+//                 //                console.dir(jsonResponse); // View parsed JSON data
+//                 if (jsonResponse.error) {
+//                     if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
+//                         retries--;
+//                         console.log("Rate limit encountered.");
+//                         await new Promise(resolve => setTimeout(resolve, 1000));
+//                     } else {
+//                         return jsonResponse;
+//                     }
+//                 } else {
+//                     return jsonResponse;
+//                 }
+//             } catch (error) {
+//                 retries--;
+//                 console.dir(error);
+//                 console.warn(`Try/catch error while fetching account history, retrying in 1 second. Attempts remaining: ${retries}`);
+//                 await new Promise(resolve => setTimeout(resolve, 1000));
+//             }
+//         }
+//         throw new Error('Failed to fetch account history after all retries');
+//     }
+
+//     let lastActivity = await FetchAccountHistoryWithRetry(account, -1, apiEndpoint);
+//     // console.log(JSON.stringify(lastActivity, null, 2));
+//     let transactionIndex = lastActivity.result[0][0];
+//     let transactionTime = lastActivity.result[0][1].timestamp;
+//     let transactionTimeStamp = new Date(transactionTime + 'Z').getTime();
+//     console.log(`Before loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+//     console.log(`Before loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+
+//     while (startTimeStamp < transactionTimeStamp) {
+//         console.log(`looking for transactions in ${account} account  history.`);
+//         if (!lastActivity.result) {
+//             console.log(`downloading transaction failed for ${account}.  Skipping.`);
+//             continue;
+//         }
+//         lastActivity.result.forEach(activity => {
+//             allActivities.push(activity);  // Add the entire activity object to the array
+
+//             let steemOp = activity[1]?.op?.[0];
+//             console.log(`Steem operation: ${steemOp}`);
+//             if (steemOp === "comment") {
+//                 let parentAuthor = activity[1].op[1].parent_author;
+//                 if (!parentAuthor) {
+//                     postList.push(activity);
+//                 } else {
+//                     let author = activity[1].op[1].author;
+//                     if (author === account) {
+//                         commentList.push(activity);
+//                     } else {
+//                         replyList.push(activity);
+//                     }
+//                 }
+//             }
+//             console.log("Processed");
+//             // console.log(`Inside loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+//             // console.log(`Inside loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+//         });
+
+//         console.log(`After loop: start time: ${startTime}, transaction time: ${transactionTime}`);
+//         console.log(`After loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+
+//         transactionIndex--;
+//         lastActivity = await FetchAccountHistoryWithRetry(account, transactionIndex, apiEndpoint);
+//         console.log(JSON.stringify(lastActivity, null, 2));
+//         transactionTime = lastActivity.result[0][1].timestamp;
+//         transactionTimeStamp = new Date(`${transactionTime}Z`).getTime();
+//     }
+//     return { postList, commentList, replyList };
+// }
+
 async function getAccountActivities(account, startTime, apiEndpoint) {
     const startTimeStamp = new Date(startTime).getTime();
-    let allActivities = [];  // Initialize an empty array to store activities
-    let postList = [];    // Initialize list of posts
-    let commentList = []; // Initialize list of comments
-    let replyList = [];   // Initialize list of replies
+    let postList = [], commentList = [], replyList = [];
+    let lastId = -1;
+    const chunkSize = 20;
 
-    async function FetchAccountHistoryWithRetry(account, index, apiEndpoint, retries = 5) {
+    async function fetchAccountHistory(lastId, limit, retries = 10) {
         while (retries > 0) {
             try {
                 const response = await fetch(apiEndpoint, {
@@ -297,18 +385,16 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                     body: JSON.stringify({
                         jsonrpc: "2.0",
                         method: "condenser_api.get_account_history",
-                        params: [account, index, 0],
+                        params: [account, lastId, limit],
                         id: 1
                     })
                 });
 
-                jsonResponse = await response.json();
-                //                console.dir(jsonResponse); // View parsed JSON data
+                const jsonResponse = await response.json();
                 if (jsonResponse.error) {
                     if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
-                        retries--;
-                        console.log("Rate limit encountered.");
                         await new Promise(resolve => setTimeout(resolve, 1000));
+                        retries--;
                     } else {
                         return jsonResponse;
                     }
@@ -316,61 +402,43 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                     return jsonResponse;
                 }
             } catch (error) {
+                console.warn(`Error fetching account history, retrying. Attempts left: ${retries}`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 retries--;
-                console.dir(error);
-                console.warn(`Try/catch error while fetching account history, retrying in 1 second. Attempts remaining: ${retries}`);
-                await new Promise(resolve => setTimeout(resolve, 1000));
             }
         }
         throw new Error('Failed to fetch account history after all retries');
     }
 
-    let lastActivity = await FetchAccountHistoryWithRetry(account, -1, apiEndpoint);
-    // console.log(JSON.stringify(lastActivity, null, 2));
-    let transactionIndex = lastActivity.result[0][0];
-    let transactionTime = lastActivity.result[0][1].timestamp;
-    let transactionTimeStamp = new Date(transactionTime + 'Z').getTime();
-    console.log(`Before loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-    console.log(`Before loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
+    while (true) {
+        const activities = await fetchAccountHistory(lastId, chunkSize);
+        if (!activities.result || activities.result.length === 0) break;
 
-    while (startTimeStamp < transactionTimeStamp) {
-        console.log(`looking for transactions in ${account} account  history.`);
-        if (!lastActivity.result) {
-            console.log(`downloading transaction failed for ${account}.  Skipping.`);
-            continue;
-        }
-        lastActivity.result.forEach(activity => {
-            allActivities.push(activity);  // Add the entire activity object to the array
+        // Process activities in reverse order (from most recent to oldest)
+        for (let i = activities.result.length - 1; i >= 0; i--) {
+            const activity = activities.result[i];
+            const [id, { timestamp, op }] = activity;
+            const transactionTimeStamp = new Date(`${timestamp}Z`).getTime();
 
-            let steemOp = activity[1]?.op?.[0];
-            console.log(`Steem operation: ${steemOp}`);
-            if (steemOp === "comment") {
-                let parentAuthor = activity[1].op[1].parent_author;
-                if (!parentAuthor) {
+            if (transactionTimeStamp <= startTimeStamp) {
+                return { postList, commentList, replyList };
+            }
+
+            if (op[0] === "comment") {
+                const [, { parent_author, author }] = op;
+                if (!parent_author) {
                     postList.push(activity);
+                } else if (author === account) {
+                    commentList.push(activity);
                 } else {
-                    let author = activity[1].op[1].author;
-                    if (author === account) {
-                        commentList.push(activity);
-                    } else {
-                        replyList.push(activity);
-                    }
+                    replyList.push(activity);
                 }
             }
-            console.log("Processed");
-            // console.log(`Inside loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-            // console.log(`Inside loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
-        });
 
-        console.log(`After loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-        console.log(`After loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
-
-        transactionIndex--;
-        lastActivity = await FetchAccountHistoryWithRetry(account, transactionIndex, apiEndpoint);
-        console.log(JSON.stringify(lastActivity, null, 2));
-        transactionTime = lastActivity.result[0][1].timestamp;
-        transactionTimeStamp = new Date(`${transactionTime}Z`).getTime();
+            lastId = id - 1;
+        }
     }
+
     return { postList, commentList, replyList };
 }
 
