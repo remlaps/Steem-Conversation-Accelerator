@@ -128,11 +128,12 @@
     cursor: pointer;
     background-color: #2d2deb;
     color: gold;
-    /* background-color: #f0f0f0; */
+    font-weight: bold;
 }
 
 .account-summary a {
     color: gold;
+    font-weight: bold;
   }
 
 .account-content {
@@ -150,7 +151,6 @@
     padding: 8px;
     cursor: pointer;
     background-color: rgb(215, 225, 225);
-    /* background-color: #f8f8f8; */
     color: royalblue;
 }
 
