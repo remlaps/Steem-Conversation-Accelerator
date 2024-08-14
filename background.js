@@ -1,16 +1,21 @@
 /* global chrome, steem */
 
 /*
- *  Import additional scripts for accessing, locking, and mamipulating local storage.
+ *  Import additional functions for accessing, locking, and mamipulating local storage.
  */
 importScripts('localStorageUtils.js');
 let isCheckingActivity = false;
 saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorageUtils.js"
 
+/*
+ * Other global variables
+ */
+let isCheckSteemActivityAlarmActive = false; // This is used to determine whether the alarm needs to restart when the browser becomes active again.
 let accountsWithNewActivity = [];
 let savedAccountList = [];
 
 if (typeof browser === "undefined") {
+    // This is an attempt to provide Firefox compatibility, suggested by Claude.ai.
     var browser = chrome;
 }
 
@@ -63,17 +68,26 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 /*
- * Disable alarms if the browser goes idle.  Reenable when activity resumes.
+ * Disable alarms if the browser goes idle for 10 minutes.  Reenable when activity resumes.
  */
-chrome.idle.onStateChanged.addListener(state => {
+chrome.idle.onStateChanged.addListener((state) => {
     if (state === 'idle') {
-        // console.log("Browser is idle.  Disabling the alarms.");
-        clearAlarms();
+      // Set the idle timeout alarm
+      chrome.alarms.create('idleTimeoutAlarm', { delayInMinutes: 10 });
+      console.log('Idle timeout alarm set.');
     } else if (state === 'active') {
-        // console.log("Browser is active.  Setting the alarms.");
-        setupAlarms();
+      // Clear the idle timeout alarm if it's set
+      chrome.alarms.clear('idleTimeoutAlarm');
+      console.log('Idle timeout alarm cleared.');
+
+        // Restart checkSteemActivity if not already active
+        if (!isCheckSteemActivityAlarmActive) {
+            setupAlarms();
+        }
+        showAlarms();
+
     }
-});
+  });
 
 /*
  * When a "checkSteemActivity" alarm is received,
@@ -93,6 +107,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
             }
         });
         // console.log("Ending alarm processing.");
+    } else if ( alarm.name === 'idleTimeoutAlarm') {
+        clearAlarms();
     }
 });
 
@@ -108,11 +124,13 @@ function clearAlarms() {
     chrome.alarms.clear('checkSteemActivity', wasCleared => {
         if (wasCleared) {
             console.log('Alarm "checkSteemActivity" cleared successfully.');
+            isCheckSteemActivityAlarmActive = false;
         } else {
             console.log('Alarm "checkSteemActivity" not found or could not be cleared.');
         }
     });
 }
+
 
 // Set the alarms (when the extension loads or activates, or after the last poll finishes)
 function setupAlarms() {
@@ -126,6 +144,7 @@ function setupAlarms() {
             }
         });
     });
+    isCheckSteemActivityAlarmActive = true;
 }
 
 function showAlarms() {
@@ -242,7 +261,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     }
                     // const cT = new Date(`${lastAccountActivityObserved}`);
 
-                    console.debug(`Comparing ${searchMin.toISOString()} and ${lastAccountActivityObserved.toISOString()} for user ${followedAccount}.`);
+                    // console.debug(`Comparing ${searchMin.toISOString()} and ${lastAccountActivityObserved.toISOString()} for user ${followedAccount}.`);
                     if (new Date (searchMin) < new Date (lastAccountActivityObserved)) {
                         // Activity observed after last notification
                         newActivityFound = true;
@@ -290,7 +309,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                             lastCheckedIndex: i,
                             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
                         });
-                    //    console.log(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${lastAccountActivityObserved.toISOString()}.`);
+                        console.debug(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${lastAccountActivityObserved.toISOString()}.`);
                     }
 
                     // Add a small delay to avoid overwhelming the API
