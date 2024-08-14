@@ -6,7 +6,8 @@
         "alarms",
         "idle",
         "storage",
-        "notifications"
+        "notifications",
+        "scripting"
     ],
     "background": {
         "service_worker": "background.js"
@@ -18,5 +19,11 @@
         "16": "SCAicon16.png",
         "48": "SCAicon48.png",
         "128": "SCAicon128.png"
-    }
+    },
+    "host_permissions": [
+        "https://api.moecki.online/",
+        "https://api.steememory.com/",
+        "https://api.steemit.com/",
+        "https://api.steemitdev.com/"
+    ]
 }

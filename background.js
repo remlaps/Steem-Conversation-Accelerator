@@ -150,50 +150,29 @@ function deleteTriplet(accountTriplets, accountToDelete) {
     return accountTriplets.filter(item => item.account !== accountToDelete);
 }
 
-async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 5) {
-    try {
-        const lastAccountActivityObserved = await getActivityTime(followedAccount, apiNode, startTime);
-        if (lastAccountActivityObserved !== null) {
-            return lastAccountActivityObserved;
-        } else {
-            console.warn(`Failed to get activity time for ${followedAccount}. Retrying in 1 second... (${retries} retries left)`);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
-            if (retries > 0) {
-                return getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries - 1);
-            } else {
-                console.error(`Failed to get activity time for ${followedAccount} after maximum retries.`);
-                return null;
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 10) {
+    for (let i = 0; i < retries; i++) {
+        try {
+            const lastAccountActivityObserved = await getActivityTime(followedAccount, apiNode, startTime);
+            if (lastAccountActivityObserved !== null) {
+                return lastAccountActivityObserved;
             }
+        } catch (error) {
+            console.error(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
         }
-    } catch (error) {
-        console.error(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
-        if (retries > 0) {
-            console.warn(`Retrying getActivityTimeWithRetry for ${followedAccount} in 1 second... (${retries} retries left)`);
-            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait for 1 second
-            return getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries - 1);
-        } else {
-            console.error(`Failed to get activity time for ${followedAccount} after maximum retries due to error.`);
-            return null;
-        }
-}
+        
+        const waitTime = Math.min(1000 * Math.pow(2, i), 30000); // Exponential backoff, max 30 seconds
+        console.warn(`Failed to get activity time for ${followedAccount}. Retrying in ${waitTime/1000} seconds... (${retries - i - 1} retries left)`);
+        await delay(waitTime);
+    }
+    
+    console.error(`Failed to get activity time for ${followedAccount} after maximum retries.`);
+    return null;
 }
 
-async function getFollowingListWithRetry(steemObserverName, apiNode, retries = 5) {
-    while (retries > 0) {
-        try {
-            const followingList = await getFollowingList(steemObserverName, apiNode);
-            // Clear the stored progress after successful completion
-            await chrome.storage.local.remove(['lastFetchedUser', 'partialFollowingList']);
-            return followingList;
-        } catch (error) {
-            retries--;
-            console.warn(`Failed to get following list for ${steemObserverName}. Retrying in 1 second.`);
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-    }
-    console.error(`Retry limit exceeded. Failed to get following list. Skipping ${steemObserverName}...`);
-    return [];
-}
+
 
 async function checkForNewActivitySinceLastNotification(steemObserverName) {
     let isCheckingActivity = await getIsCheckingActivity();
@@ -421,7 +400,7 @@ async function deleteNoFollows(followList, activityTriplets) {
     return newActivityTriplets;
 }
 
-async function getFollowingList(steemObserverName, apiNode, limit = 100) {
+async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetries = 5) {
     let followingList = [];
     let start = null;
 
@@ -430,30 +409,59 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100) {
     if (storedData.lastFetchedUser && storedData.partialFollowingList) {
         start = storedData.lastFetchedUser;
         followingList = storedData.partialFollowingList;
-        // console.log(`Resuming from ${start} with ${followingList.length} users already fetched.`);
     }
 
     try {
-        // console.log(`Retrieving follower list for ${steemObserverName} from: ${apiNode}`);
         do {
-            // Reset data before each request
             let data;
-            const response = await fetch(apiNode, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    jsonrpc: '2.0',
-                    method: 'condenser_api.get_following',
-                    params: [steemObserverName, start, 'blog', limit],
-                    id: 1
-                })
-            });
-            data = await response.json();
+            let retries = 0;
+            while (retries < maxRetries) {
+                try {
+                    const response = await fetch(apiNode, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            jsonrpc: '2.0',
+                            method: 'condenser_api.get_following',
+                            params: [steemObserverName, start, 'blog', limit],
+                            id: 1
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    data = await response.json();
+                    break; // If we get here, the request was successful
+                } catch (error) {
+                    if (retries === maxRetries - 1) {
+                        throw error; // Rethrow if we've exhausted all retries
+                    }
+                    const waitTime = Math.min(1000 * Math.pow(2, retries), 30000);
+                    console.warn(`Error fetching data. Retrying in ${waitTime/1000} seconds...`);
+                    await async function getFollowingListWithRetry(steemObserverName, apiNode, limit = 100, maxRetries = 3) {
+                        for (let i = 0; i < maxRetries; i++) {
+                            try {
+                                return await getFollowingList(steemObserverName, apiNode, limit);
+                            } catch (error) {
+                                if (i === maxRetries - 1) {
+                                    console.error(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
+                                    throw error;
+                                }
+                                const waitTime = Math.min(1000 * Math.pow(2, i), 30000);
+                                console.warn(`Failed to get following list. Retrying in ${waitTime/1000} seconds...`);
+                                await delay(waitTime);
+                            }
+                        }
+                    }(waitTime);
+                    retries++;
+                }
+            }
 
             if (data.error) {
-                // warn for single attempt, error in calling routine after retries.
                 console.warn('Error fetching following list:', data.error.message);
                 break;
             }
@@ -462,8 +470,6 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100) {
                 const users = data.result.map(user => user.following);
                 followingList = followingList.concat(users);
                 start = users.length === limit ? users[users.length - 1] : null;
-                // console.log(`Fetched ${users.length} users. Next start: ${start}`);
-                // Save progress after each successful fetch
                 await chrome.storage.local.set({
                     lastFetchedUser: start,
                     partialFollowingList: followingList
@@ -472,110 +478,38 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100) {
                 console.error('Unexpected API response structure:', data);
                 break;
             }
+
+            // Add a small delay between requests to avoid rate limiting
+            await delay(1000);
         } while (start);
 
         followingList = Array.from(new Set(followingList));
         return followingList;
     } catch (error) {
         console.error('Error fetching following list:', error);
-        // Save progress before throwing error
         await chrome.storage.local.set({
             lastFetchedUser: start,
             partialFollowingList: followingList
         });
-        throw error; // Rethrow the error to be caught by getFollowingListWithRetry
+        throw error;
     }
 }
 
-// async function getActivityTime(user, apiNode, startTime) {
-//     //    console.log(`Getting account history for ${user} from ${startTime} until now.`);
-//     try {
-//         let lastTransaction = -1;
-//         const transactionCount = 0;
-//         const limit = 1;
-//         const maxTransactions = 100;
-
-//         while (transactionCount < maxTransactions) {
-//             const postData = JSON.stringify({
-//                 jsonrpc: '2.0',
-//                 method: 'condenser_api.get_account_history',
-//                 params: [user, lastTransaction, limit], // Keep fetching one at a time as in original
-//                 id: 1
-//             });
-
-//             // console.log(`Fetching data for ${user}, transaction: ${lastTransaction}`);
-//             const loopStartTime = new Date();
-
-//             try {
-//                 const response = await fetch(apiNode, {
-//                     keepalive: true,
-//                     method: 'POST',
-//                     headers: {
-//                         'Content-Type': 'application/json'
-//                     },
-//                     body: postData
-//                 });
-
-//                 if (!response.ok) {
-//                     const errorText = await response.text();
-//                     console.error(`Response not OK when Fetching data for ${user}: ${response.status} ${errorText}`);
-//                     return null;
-//                 }
-
-//                 const data = await response.json();
-
-//                 if (data.error) {
-//                     // warn for single attempt, error in calling routine after retries.
-//                     console.warn(`Data error fetching data for ${user} / ${data.error.code}: ${data.error.message}`);
-//                     return null;
-//                 }
-
-//                 if (!data.result || data.result.length < 1 || data.result[0].length < 2 || data.result[0][1].timestamp.length === 0) {
-//                     // console.log(`No recent activity found for ${user}`);
-//                     return null;
-//                 }
-
-//                 const [transId, transaction] = data.result[0];
-//                 const {timestamp, op} = transaction;
-//                 const [opType] = op;
-
-//                 // console.log(`Transaction: ${transId}, Operation: ${opType}, Timestamp: ${timestamp}`);
-
-//                 if (opType === 'comment') {
-//                     return new Date(`${timestamp}Z`);
-//                 }
-
-//                 if (new Date(startTime) > new Date(`${timestamp}Z`)) {
-//                     return new Date("1970-01-01T00:00:00Z");
-//                 }
-
-//                 lastTransaction = transId - 1;
-//                 transactionCount++;
-
-//                 if (transactionCount >= maxTransactions) {
-//                     // console.log(`Processed ${maxTransactions} transactions: at ${lastTransaction} for ${user}. Bailing out.`);
-//                     return new Date("1970-01-01T00:00:00Z");
-//                 }
-
-//                 const loopEndTime = new Date();
-//                 // console.log(`Loop iteration took ${loopEndTime - loopStartTime}ms`);
-
-//             } catch (fetchError) {
-//                 // warn for single attempt, error in calling routine after retries.
-//                 console.warn(`Fetch error for ${user}:`, fetchError);
-//                 return null;
-//             }
-//         }
-
-//         // console.log(`No comment found within ${maxTransactions} transactions for ${user}`);
-//         return new Date("1970-01-01T00:00:00Z");
-
-//     } catch (error) {
-//         // warn for single attempt, error in calling routine after retries.
-//         console.warn(`Unexpected error for ${user}:`, error);
-//         return null;
-//     }
-// }
+async function getFollowingListWithRetry(steemObserverName, apiNode, limit = 100, maxRetries = 3) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await getFollowingList(steemObserverName, apiNode, limit);
+        } catch (error) {
+            if (i === maxRetries - 1) {
+                console.error(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
+                throw error;
+            }
+            const waitTime = Math.min(1000 * Math.pow(2, i), 30000);
+            console.warn(`Failed to get following list. Retrying in ${waitTime/1000} seconds...`);
+            await delay(waitTime);
+        }
+    }
+}
 
 async function getActivityTime(user, apiNode, startTime) {
     try {
@@ -597,9 +531,11 @@ async function getActivityTime(user, apiNode, startTime) {
                 body: postData
             });
 
-            if (!response.ok) {
-                console.error(`Error fetching data for ${user}: ${response.status}`);
-                return null;
+            if (!response.ok) { 
+                console.warn(`Rate limit hit for ${user}. Waiting before retry.`);
+                await delay(5000); // Wait for 5 seconds before retrying
+                chunkIndex--; // Retry this chunk
+                continue;
             }
 
             const data = await response.json();
@@ -629,6 +565,9 @@ async function getActivityTime(user, apiNode, startTime) {
 
                 lastTransaction = transId - 1;
             }
+
+            // Add a small delay between chunks to avoid rate limiting
+            await delay(1000);
         }
 
         return new Date("1970-01-01T00:00:00Z");
