@@ -219,9 +219,10 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
             /*
              * Set times to 15 minutes ago if this hasn't been running, or if local storage got somehow lost.
              */
-            const currentCheckTime = new Date().toISOString();
-            const fifteenMinutesAgo = (new Date(currentCheckTime.getTime() - 15 * 60 * 1000)).toISOString();
-            await chrome.storage.local.set({'lastBackgroundPollTime': currentCheckTime});
+            const now=new Date();
+            const currentCheckTime = now.toISOString();
+            const fifteenMinutesAgo = Date(now.getTime() - 15 * 60 * 1000).toISOString();
+            await chrome.storage.local.set({ 'lastBackgroundPollTime': currentCheckTime });
 
             // Initialize times if they're empty
             lastAlertTime = lastAlertTime || fifteenMinutesAgo;
