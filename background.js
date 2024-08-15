@@ -8,11 +8,11 @@ let isCheckingActivity = false;
 saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorageUtils.js"
 
 /*
- * Other global variables
+ * Other global variables / functions using the arrrow operator.
  */
-let isCheckSteemActivityAlarmActive = false; // This is used to determine whether the alarm needs to restart when the browser becomes active again.
 let accountsWithNewActivity = [];
 let savedAccountList = [];
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 if (typeof browser === "undefined") {
     // This is an attempt to provide Firefox compatibility, suggested by Claude.ai.
@@ -20,9 +20,9 @@ if (typeof browser === "undefined") {
 }
 
 /*
- * Run these instructions at installation and reload time.
+ * Run at installation and/or reload time.
  */
-chrome.runtime.onInstalled.addListener(function (details) {
+chrome.runtime.onInstalled.addListener( async function (details) {
     let pluginStartTime = new Date().toISOString();
     if (details.reason === 'install') {
         /*
@@ -40,17 +40,21 @@ chrome.runtime.onInstalled.addListener(function (details) {
     } else if (details.reason === 'update') {
         console.log(`plugin updated at ${pluginStartTime}`);
     }
-    chrome.storage.local.get(['steemObserverName'], async (result) => {
+
+    try {
+        const result = await chrome.storage.local.get(['steemObserverName']);
         const steemObserverName = result.steemObserverName;
         if (steemObserverName) {
-            // Reinitialize.  This should probably only happen when the plugin was reloaded.  Not when it was installed.
             await saveIsCheckingActivity(false);
             await checkForNewActivitySinceLastNotification(steemObserverName);
             setupAlarms();
         } else {
             console.log('Steem username not set for SCA. Please set it in the extension settings.');
         }
-    });
+    } catch (error) {
+        console.error('Error loading storage:', error);
+    }
+
     showAlarms();
 });
 
@@ -72,22 +76,29 @@ chrome.storage.onChanged.addListener((changes, area) => {
  */
 chrome.idle.onStateChanged.addListener((state) => {
     if (state === 'idle') {
-      // Set the idle timeout alarm
-      chrome.alarms.create('idleTimeoutAlarm', { delayInMinutes: 10 });
-      console.log('Idle timeout alarm set.');
+        // Browser went idle.  Set an idle timeout.
+        chrome.alarms.create('idleTimeoutAlarm', { delayInMinutes: 10 });
+        console.log('Idle timeout alarm set.');
     } else if (state === 'active') {
-      // Clear the idle timeout alarm if it's set
-      chrome.alarms.clear('idleTimeoutAlarm');
-      console.log('Idle timeout alarm cleared.');
+        // Browser became active, clear the idle timeout.
+        chrome.alarms.get('idleTimeoutAlarm', (alarm) => {
+            if (alarm) {
+                chrome.alarms.clear('idleTimeoutAlarm');
+                console.log('Idle timeout alarm cleared.');
+            } else {
+                console.log('No idle timeout alarm to clear.');
+            }
 
-        // Restart checkSteemActivity if not already active
-        if (!isCheckSteemActivityAlarmActive) {
-            setupAlarms();
-        }
-        showAlarms();
-
+            // Restart checkSteemActivity if not already active
+            chrome.alarms.get('checkSteemActivity', (alarm) => {
+                if (!alarm) {
+                    setupAlarms();
+                }
+            });
+            showAlarms();
+        });
     }
-  });
+});
 
 /*
  * When a "checkSteemActivity" alarm is received,
@@ -124,7 +135,6 @@ function clearAlarms() {
     chrome.alarms.clear('checkSteemActivity', wasCleared => {
         if (wasCleared) {
             console.log('Alarm "checkSteemActivity" cleared successfully.');
-            isCheckSteemActivityAlarmActive = false;
         } else {
             console.log('Alarm "checkSteemActivity" not found or could not be cleared.');
         }
@@ -144,7 +154,6 @@ function setupAlarms() {
             }
         });
     });
-    isCheckSteemActivityAlarmActive = true;
 }
 
 function showAlarms() {
@@ -169,8 +178,6 @@ function deleteTriplet(accountTriplets, accountToDelete) {
     return accountTriplets.filter(item => item.account !== accountToDelete);
 }
 
-const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
 async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 10) {
     for (let i = 0; i < retries; i++) {
         try {
@@ -179,7 +186,7 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
                 return lastAccountActivityObserved;
             }
         } catch (error) {
-            console.error(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
+            console.warn(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
         }
         
         const waitTime = Math.min(1000 * Math.pow(2, i), 30000); // Exponential backoff, max 30 seconds
@@ -187,11 +194,9 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
         await delay(waitTime);
     }
     
-    console.error(`Failed to get activity time for ${followedAccount} after maximum retries.`);
+    console.warn(`Failed to get activity time for ${followedAccount} after maximum retries.`);
     return null;
 }
-
-
 
 async function checkForNewActivitySinceLastNotification(steemObserverName) {
     let isCheckingActivity = await getIsCheckingActivity();
@@ -211,10 +216,12 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     await chrome.storage.local.get(['lastAlertTime', 'lastBackgroundPollTime', 'lastActivityPageViewTime',
                         'accountsWithNewActivity', 'lastCheckedIndex']);
 
+            /*
+             * Set times to 15 minutes ago if this hasn't been running, or if local storage got somehow lost.
+             */
             const currentCheckTime = new Date().toISOString();
-            const fifteenMinutesAgo = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+            const fifteenMinutesAgo = (new Date(currentCheckTime.getTime() - 15 * 60 * 1000)).toISOString();
             await chrome.storage.local.set({'lastBackgroundPollTime': currentCheckTime});
-
 
             // Initialize times if they're empty
             lastAlertTime = lastAlertTime || fifteenMinutesAgo;
@@ -223,25 +230,25 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                 lastActivityPageViewTime = fifteenMinutesAgo;
                 await chrome.storage.local.set({'lastActivityPageViewTime': lastActivityPageViewTime});
             } 
-
-            // Start checks when the activity page was last viewed, or 15 minutes ago.
             const checkStartTime = lastActivityPageViewTime;
 
             // console.log(`Last alert time: ${lastAlertTime}`);
             // console.log(`Last notification time: ${lastBackgroundPollTime}`);
             // console.log(`Check start time: ${checkStartTime}`);
 
+            /*
+             * get accountsWithNewActivity from storage or set it up with an empty list and 0 length.
+             */
             accountsWithNewActivity = JSON.parse(accountsWithNewActivity || '[]');
             lastCheckedIndex = lastCheckedIndex || 0;
 
-            // console.log(`Resuming check from index ${lastCheckedIndex}`);
+            // console.log(`Beginning or resuming check from index ${lastCheckedIndex}`);
 
             steemObserverName = await getStoredUser();
             apiNode = await getApiServerName();
             const followingList = await getFollowingListWithRetry(steemObserverName, apiNode);
-            let newActivityFound = false;
-
             accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
+            let newActivityFound = false;
 
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
@@ -259,7 +266,6 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                         console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
                         continue;
                     }
-                    // const cT = new Date(`${lastAccountActivityObserved}`);
 
                     // console.debug(`Comparing ${searchMin.toISOString()} and ${lastAccountActivityObserved.toISOString()} for user ${followedAccount}.`);
                     if (new Date (searchMin) < new Date (lastAccountActivityObserved)) {
@@ -285,15 +291,10 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                         }
 //                        console.debug("Saved account.");
                     } else {
-                        // Covered under previous notification.
+                        // Clean up already-displayed entries in accountsWithNewActivity.
                         existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                         if (existingAccountIndex !== -1) {
-                            // console.debug(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
                             accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
-                            // console.debug(`Deleted account: ${followedAccount}`);
-                            // console.debug(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
-                        // } else {
-                        //      console.debug(`Account not in list: ${followedAccount}.`);
                         }
                     }
 
