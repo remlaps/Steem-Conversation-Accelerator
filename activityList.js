@@ -78,7 +78,9 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
 
         try {
             const activities = await getAccountActivities(account.account, account.lastDisplayTime, apiEndpoint);
-            const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL);
+            searchMin = account.lastDisplayTime;
+            console.debug(`81: searchMin in updateAccountsList - ${searchMin}, ${typeof (searchMin)}`);
+            const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL, searchMin);
             listItem.innerHTML = content;
         } catch (error) {
             console.warn(`Error fetching activities for account ${account.account}:`, error);
@@ -139,7 +141,7 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     return content;
 }
 
-async function processItems(items, type, apiEndpoint, webServerName, accountURL, permLink) {
+async function processItems(items, type, apiEndpoint, webServerName, accountURL) {
     console.debug(`Entered processItems: ${type}`);
     let content;
     content = `<div class="indented-content">`;
@@ -171,16 +173,14 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL,
     return content;
 }
 
-async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, permLink) {
-    console.debug("Entered processAllItems");
-
+async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, lastDisplayTime) {
     if (postList.length === 0 && commentList.length === 0 && replyList.length === 0) {
         return "";
     }
 
     let content = `
         <details class="account-details">
-            <summary class="account-summary"><a href="${webServerName}/@${account}" target="_blank">${account}</a></summary>
+            <summary class="account-summary"><strong><a href="${webServerName}/@${account}" target="_blank">${account}</a></strong>: Activity after ${lastDisplayTime}</summary>
             <div class="account-content">
         `;
 
@@ -189,7 +189,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
                 <details class="content-details posts-details" open>
                     <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
                     <div class="content-inner posts-content">
-                        ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL, permLink)}
+                        ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL)}
                     </div>
                 </details>
             `;
@@ -200,7 +200,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
                 <details class="content-details comments-details" open>
                     <summary class="content-summary"><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
                     <div class="content-inner comments-content">
-                        ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL, permLink)}
+                        ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL)}
                     </div>
                 </details>
             `;
@@ -211,7 +211,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
                 <details class="content-details replies-details" open>
                     <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
                     <div class="content-inner replies-content">
-                        ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL, permLink)}
+                        ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL)}
                     </div>
                 </details>
             `;
@@ -277,99 +277,6 @@ async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity) 
     });
 }
 
-// async function getAccountActivities(account, startTime, apiEndpoint) {
-//     const startTimeStamp = new Date(startTime).getTime();
-//     let allActivities = [];  // Initialize an empty array to store activities
-//     let postList = [];    // Initialize list of posts
-//     let commentList = []; // Initialize list of comments
-//     let replyList = [];   // Initialize list of replies
-
-//     async function FetchAccountHistoryWithRetry(account, index, apiEndpoint, retries = 5) {
-//         while (retries > 0) {
-//             try {
-//                 const response = await fetch(apiEndpoint, {
-//                     method: 'POST',
-//                     headers: { 'Content-Type': 'application/json' },
-//                     body: JSON.stringify({
-//                         jsonrpc: "2.0",
-//                         method: "condenser_api.get_account_history",
-//                         params: [account, index, 0],
-//                         id: 1
-//                     })
-//                 });
-
-//                 jsonResponse = await response.json();
-//                 //                console.dir(jsonResponse); // View parsed JSON data
-//                 if (jsonResponse.error) {
-//                     if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
-//                         retries--;
-//                         console.log("Rate limit encountered.");
-//                         await new Promise(resolve => setTimeout(resolve, 1000));
-//                     } else {
-//                         return jsonResponse;
-//                     }
-//                 } else {
-//                     return jsonResponse;
-//                 }
-//             } catch (error) {
-//                 retries--;
-//                 console.dir(error);
-//                 console.warn(`Try/catch error while fetching account history, retrying in 1 second. Attempts remaining: ${retries}`);
-//                 await new Promise(resolve => setTimeout(resolve, 1000));
-//             }
-//         }
-//         throw new Error('Failed to fetch account history after all retries');
-//     }
-
-//     let lastActivity = await FetchAccountHistoryWithRetry(account, -1, apiEndpoint);
-//     // console.log(JSON.stringify(lastActivity, null, 2));
-//     let transactionIndex = lastActivity.result[0][0];
-//     let transactionTime = lastActivity.result[0][1].timestamp;
-//     let transactionTimeStamp = new Date(transactionTime + 'Z').getTime();
-//     console.log(`Before loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-//     console.log(`Before loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
-
-//     while (startTimeStamp < transactionTimeStamp) {
-//         console.log(`looking for transactions in ${account} account  history.`);
-//         if (!lastActivity.result) {
-//             console.log(`downloading transaction failed for ${account}.  Skipping.`);
-//             continue;
-//         }
-//         lastActivity.result.forEach(activity => {
-//             allActivities.push(activity);  // Add the entire activity object to the array
-
-//             let steemOp = activity[1]?.op?.[0];
-//             console.log(`Steem operation: ${steemOp}`);
-//             if (steemOp === "comment") {
-//                 let parentAuthor = activity[1].op[1].parent_author;
-//                 if (!parentAuthor) {
-//                     postList.push(activity);
-//                 } else {
-//                     let author = activity[1].op[1].author;
-//                     if (author === account) {
-//                         commentList.push(activity);
-//                     } else {
-//                         replyList.push(activity);
-//                     }
-//                 }
-//             }
-//             console.log("Processed");
-//             // console.log(`Inside loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-//             // console.log(`Inside loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
-//         });
-
-//         console.log(`After loop: start time: ${startTime}, transaction time: ${transactionTime}`);
-//         console.log(`After loop: start time stamp: ${startTimeStamp}, transaction time stamp: ${transactionTimeStamp}`);
-
-//         transactionIndex--;
-//         lastActivity = await FetchAccountHistoryWithRetry(account, transactionIndex, apiEndpoint);
-//         console.log(JSON.stringify(lastActivity, null, 2));
-//         transactionTime = lastActivity.result[0][1].timestamp;
-//         transactionTimeStamp = new Date(`${transactionTime}Z`).getTime();
-//     }
-//     return { postList, commentList, replyList };
-// }
-
 async function getAccountActivities(account, startTime, apiEndpoint) {
     const startTimeStamp = new Date(startTime).getTime();
     let postList = [], commentList = [], replyList = [];
@@ -416,6 +323,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
 
         // Process activities in reverse order (from most recent to oldest)
         for (let i = activities.result.length - 1; i >= 0; i--) {
+            console.debug(`Checking ${activities.result[i]} in fetchAccountHistory`);
             const activity = activities.result[i];
             const [id, { timestamp, op }] = activity;
             const transactionTimeStamp = new Date(`${timestamp}Z`).getTime();
@@ -424,6 +332,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                 return { postList, commentList, replyList };
             }
 
+            console.debug(`id: ${id}, timestamp: ${timestamp}, ttstamp: ${transactionTimeStamp}, startTime: ${startTimeStamp}, Operation: ${op[0]}`);
             if (op[0] === "comment") {
                 const [, { parent_author, author }] = op;
                 if (!parent_author) {

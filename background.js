@@ -164,7 +164,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
     if (await acquireLock('background', 1)) { // Lower priority
         // console.log(`array lock set in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
         try {
-            const { currentCheckTime, fifteenMinutesAgo } = await updateCheckTimes();  // clock times
+            const { currentCheckTime, fifteenMinutesAgo } = await updateCheckTimes();  // clock times as ISO Strings
             let {
                 accountsWithNewActivity,
                 lastCheckedIndex,
@@ -191,7 +191,9 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
                 const followedAccount = followingList[i];
                 try {
-                    let searchMin = new Date(checkStartTime); // Default in case there is no history for this account.
+                    let searchMin = new Date(`${checkStartTime}`);          // Default in case there is no history for this account.
+                    searchMin = new Date(searchMin.getTime() - 60 * 60 * 1000);    // Back up an hour in case of API lag.
+                                                                                
                     let existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                     if (existingAccountIndex !== -1) {
                         // Update existing accounts with their lastDisplayTime values.
@@ -205,15 +207,20 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                         continue;
                     }
 
-                    newActivityFound = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
+                    const newActivity = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity)
+                    if ( newActivity ) {
+                        newActivityFound = true;
+                    } else {
+                        accountsWithNewActivity = deleteTriplet( accountsWithNewActivity, followedAccount );
+                    }
 
-                    const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, checkStartTime, lastAccountActivityObserved, accountsWithNewActivity);
+                    const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if (!shouldContinue) {
                         return;
                     }
 
-                    // Add a small delay to avoid overwhelming the API
-                    // await new Promise(resolve => setTimeout(resolve, 100));
+                    // Add a small delay to avoid overwhelming APIs with low rate limits.
+                    await new Promise(resolve => setTimeout(resolve, 1000));
 
                 } catch (error) {
                     console.error(`Error checking activity for ${followedAccount}:`, error);
@@ -272,7 +279,7 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
             console.warn(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
         }
         
-        const waitTime = Math.min(1000 * Math.pow(2, i), 30000); // Exponential backoff, max 30 seconds
+        const waitTime = Math.min(1000 * Math.pow(2, i), 4000); // Exponential backoff, max 30 seconds
         console.warn(`Failed to get activity time for ${followedAccount}. Retrying in ${waitTime/1000} seconds... (${retries - i - 1} retries left)`);
         await delay(waitTime);
     }
@@ -288,8 +295,8 @@ async function retrieveAndInitializeProgress(fifteenMinutesAgo) {
                 'accountsWithNewActivity', 'lastCheckedIndex']);
     
     // Initialize times for polling to fifteen minutes ago, in case they're empty (i.e. first time through)
-    lastAlertTime = lastAlertTime || fifteenMinutesAgo;
-    lastBackgroundPollTime = lastBackgroundPollTime || fifteenMinutesAgo;
+    // lastAlertTime = lastAlertTime || fifteenMinutesAgo;
+    // lastBackgroundPollTime = lastBackgroundPollTime || fifteenMinutesAgo;
     if (!lastActivityPageViewTime) {
         lastActivityPageViewTime = fifteenMinutesAgo;
         await chrome.storage.local.set({'lastActivityPageViewTime': lastActivityPageViewTime});
@@ -337,7 +344,7 @@ async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
     }
 }
 
-async function saveProgressEveryTenAccounts(i, followedAccount, checkStartTime, lastAccountActivityObserved, accountsWithNewActivity) {
+async function saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity) {
     if (i % 10 === 0) {
         if (!(await updateLock('background'))) {
             // console.log('Lost lock during processing in background.js');
@@ -349,7 +356,7 @@ async function saveProgressEveryTenAccounts(i, followedAccount, checkStartTime, 
             lastCheckedIndex: i,
             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity)
         });
-        console.debug(`Processed ${followedAccount} after ${checkStartTime}. Last activity: ${lastAccountActivityObserved.toISOString()}.`);
+        // console.debug(`Processed ${followedAccount} after ${searchMin.toISOString()}. Last activity: ${lastAccountActivityObserved.toISOString()}.`);
     }
     return true;
 }
@@ -368,7 +375,7 @@ function updateAccountActivity(followedAccount, searchMin, lastAccountActivityOb
         // console.debug("Saved account.");
         return true;
     } else {
-        cleanUpDisplayedEntries(followedAccount, accountsWithNewActivity);
+        cleanUpDisplayedEntry(followedAccount, accountsWithNewActivity);
         return false;
     }
 }
@@ -390,7 +397,7 @@ function updateExistingAccountActivity(existingAccountIndex, lastAccountActivity
     // lastDisplayTime remains unchanged
 }
 
-function cleanUpDisplayedEntries(followedAccount, accountsWithNewActivity) {
+function cleanUpDisplayedEntry(followedAccount, accountsWithNewActivity) {
     const existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
     if (existingAccountIndex !== -1) {
         accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
@@ -480,7 +487,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
                     if (retries === maxRetries - 1) {
                         throw error; // Rethrow if we've exhausted all retries
                     }
-                    const waitTime = Math.min(1000 * Math.pow(2, retries), 30000);
+                    const waitTime = Math.min(1000 * Math.pow(2, retries), 4000);
                     console.warn(`Error fetching data. Retrying in ${waitTime/1000} seconds...`);
                     await async function getFollowingListWithRetry(steemObserverName, apiNode, limit = 100, maxRetries = 3) {
                         for (let i = 0; i < maxRetries; i++) {
@@ -491,7 +498,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
                                     console.error(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
                                     throw error;
                                 }
-                                const waitTime = Math.min(1000 * Math.pow(2, i), 30000);
+                                const waitTime = Math.min(1000 * Math.pow(2, i), 4000);
                                 console.warn(`Failed to get following list. Retrying in ${waitTime/1000} seconds...`);
                                 await delay(waitTime);
                             }
@@ -544,7 +551,7 @@ async function getFollowingListWithRetry(steemObserverName, apiNode, limit = 100
                 console.error(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
                 throw error;
             }
-            const waitTime = Math.min(1000 * Math.pow(2, i), 30000);
+            const waitTime = Math.min(1000 * Math.pow(2, i), 4000);
             console.warn(`Failed to get following list. Retrying in ${waitTime/1000} seconds...`);
             await delay(waitTime);
         }
@@ -555,9 +562,13 @@ async function getActivityTime(user, apiNode, startTime) {
     try {
         let lastTransaction = -1;
         const chunkSize = 20;
-        const maxChunks = 5; // This will check up to 100 transactions (5 * 20)
+        const maxChunks = 40; // This will check up to 800 transactions (40 * 20)
+                              //    - If there are more than 800 transactions for the account after the post/comment/reply, it will be missed.
 
         for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
+            if ( lastTransaction > chunkSize ) {
+                lastTransaction = chunkSize;
+            }
             const postData = JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'condenser_api.get_account_history',
@@ -581,8 +592,12 @@ async function getActivityTime(user, apiNode, startTime) {
             const data = await response.json();
 
             if (data.error) {
-                console.warn(`Data error for ${user}: ${data.error.message}`);
-                return null;
+                if ( data.error !== "Assert Exception:args.start >= args.limit: start must be greater than limit") {
+                    console.warn(`Data error for ${user}: ${data.error.message}`);
+                    return null;
+                } else {
+                    lastTransaction = chunkSize;
+                }
             }
 
             if (!data.result || data.result.length === 0) {
@@ -604,6 +619,7 @@ async function getActivityTime(user, apiNode, startTime) {
                 }
 
                 lastTransaction = transId - 1;
+
             }
 
             // Add a small delay between chunks to avoid rate limiting
