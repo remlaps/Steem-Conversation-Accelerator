@@ -27,10 +27,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             // console.log(`accountsWithNewAcitivty before splitting: ${accountsWithNewActivity}`);
-            const uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
+            let uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
             const listSize = uniqueAccountsWithNewActivity.length;
             const accountsList = document.getElementById('accountsList');
-            await updateAccountsList(uniqueAccountsWithNewActivity);
+            uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity);
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
             // There's almost certainly a race condition with background.js here, but I am too tired to think about it ATM.
@@ -78,9 +78,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
 
         try {
             const activities = await getAccountActivities(account.account, account.lastDisplayTime, apiEndpoint);
-            searchMin = account.lastDisplayTime;
-            console.debug(`81: searchMin in updateAccountsList - ${searchMin}, ${typeof (searchMin)}`);
-            const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL, searchMin);
+            const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL, account.lastDisplayTime);
             listItem.innerHTML = content;
         } catch (error) {
             console.warn(`Error fetching activities for account ${account.account}:`, error);
@@ -89,9 +87,23 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
         }
 
         accountsList.appendChild(listItem);
-        account.lastDisplayTime = account.activityTime;
+        uniqueAccountsWithNewActivity = updateLastDisplayTime(account.account, uniqueAccountsWithNewActivity);
     }
+    return uniqueAccountsWithNewActivity;
 }
+
+function updateLastDisplayTime(accountToUpdate, accountsList) {
+    return accountsList.map(item => {
+      if (item.account === accountToUpdate) {
+        console.debug(`Account: ${accountToUpdate}, display time: ${item.lastDisplayTime}, activity time: ${item.activityTime}`);
+        return {
+          ...item,
+          lastDisplayTime: item.activityTime
+        };
+      }
+      return item;
+    });
+  }
 
 function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
