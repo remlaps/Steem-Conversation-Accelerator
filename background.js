@@ -192,7 +192,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                 const followedAccount = followingList[i];
                 try {
                     let searchMin = new Date(`${checkStartTime}`);          // Default in case there is no history for this account.
-                    searchMin = new Date(searchMin.getTime() - 60 * 60 * 1000);    // Back up an hour in case of API lag.
+                    searchMin = new Date(searchMin.getTime() - 30 * 60 * 1000);    // Back up a half hour in case of API lag.
                                                                                 
                     let existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                     if (existingAccountIndex !== -1) {
@@ -207,11 +207,11 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                         continue;
                     }
 
-                    const newActivity = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity)
+                    const newActivity = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if ( newActivity ) {
                         newActivityFound = true;
                     } else {
-                        accountsWithNewActivity = deleteTriplet( accountsWithNewActivity, followedAccount );
+                        // accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
                     }
 
                     const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
@@ -266,6 +266,22 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
  */
 function deleteTriplet(accountTriplets, accountToDelete) {
     return accountTriplets.filter(item => item.account !== accountToDelete);
+}
+
+function countNewActivities(accountsWithNewActivity) {
+    let count = 0;
+
+    for (let i = 0; i < accountsWithNewActivity.length; i++) {
+        const activity = accountsWithNewActivity[i];
+        const activityTime = new Date(activity.activityTime);
+        const lastDisplayTime = new Date(activity.lastDisplayTime);
+
+        if (activityTime > lastDisplayTime) {
+            count++;
+        }
+    }
+
+    return count;
 }
 
 async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 10) {
@@ -329,9 +345,9 @@ async function updateCheckTimes() {
 }
 
 async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
-    const size = accountsWithNewActivity.length;
-    console.log(`Number of accounts with new activity: ${size}`);
-    const notificationMessage = `${size} of your followed accounts had posts, comments, or replies!`;
+    const newActivityCount = countNewActivities(accountsWithNewActivity);
+    console.log(`Number of accounts with new activity: ${newActivityCount}`);
+    const notificationMessage = `${newActivityCount} of your followed accounts had posts, comments, or replies!`;
     await chrome.storage.local.set({
         accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
         currentCheckTime: currentCheckTime
@@ -344,6 +360,7 @@ async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
     }
 }
 
+// unused parameters are passed for debugging purposes.
 async function saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity) {
     if (i % 10 === 0) {
         if (!(await updateLock('background'))) {
@@ -375,7 +392,6 @@ function updateAccountActivity(followedAccount, searchMin, lastAccountActivityOb
         // console.debug("Saved account.");
         return true;
     } else {
-        cleanUpDisplayedEntry(followedAccount, accountsWithNewActivity);
         return false;
     }
 }
@@ -395,13 +411,6 @@ function updateExistingAccountActivity(existingAccountIndex, lastAccountActivity
     existingAccount.activityTime = lastAccountActivityObserved;
     accountsWithNewActivity[existingAccountIndex] = existingAccount;
     // lastDisplayTime remains unchanged
-}
-
-function cleanUpDisplayedEntry(followedAccount, accountsWithNewActivity) {
-    const existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
-    if (existingAccountIndex !== -1) {
-        accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
-    }
 }
 
 async function displayBrowserNotification(message) {
@@ -527,7 +536,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
             }
 
             // Add a small delay between requests to avoid rate limiting
-            await delay(1000);
+            await delay(200);
         } while (start);
 
         followingList = Array.from(new Set(followingList));
@@ -623,7 +632,7 @@ async function getActivityTime(user, apiNode, startTime) {
             }
 
             // Add a small delay between chunks to avoid rate limiting
-            await delay(1000);
+            await delay(200);
         }
 
         return new Date("1970-01-01T00:00:00Z");

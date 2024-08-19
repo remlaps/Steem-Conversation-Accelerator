@@ -43,7 +43,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                     console.error("Error clearing accounts:", error);
                 });
         } finally {
-            await chrome.storage.local.set({ 'lastActivityPageViewTime': thisActivityPageViewTime });
+            await chrome.storage.local.set({
+                'lastActivityPageViewTime': thisActivityPageViewTime,
+                'lastCheckedIndex': 0
+            });
             console.log(`Updated lastActivityPageViewTime to: ${thisActivityPageViewTime}`);
             await releaseLock("activityList");
             console.log(`array lock cleared in event listener.`);
