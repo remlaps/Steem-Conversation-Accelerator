@@ -38,30 +38,6 @@ function getStoredUser() {
     });
 }
 
-async function getLastAlertTime() {
-    return new Promise((resolve, reject) => {
-        chrome.storage.local.get(['lastAlertTime'], function (result) {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-            } else {
-                resolve(result.lastAlertTime || '2024-01-01T00:00:00Z'); // Default start time if not set
-            }
-        });
-    });
-}
-
-async function getPreviousAlertTime() {
-    return new Promise((resolve, reject) => {
-        chrome.storage.local.get(['previousAlertTime'], function (result) {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-            } else {
-                resolve(result.previousAlertTime || '2024-01-01T00:00:00Z'); // Default start time if not set
-            }
-        });
-    });
-}
-
 
 function saveIsCheckingActivity(isCheckingActivity) {
     return new Promise((resolve, reject) => {
@@ -87,7 +63,7 @@ async function getIsCheckingActivity() {
     });
 }
 
-async function acquireLock(scriptName, priority, maxStaleTime = 10000, maxWaitTime = 900000) {
+async function acquireLock(scriptName, priority, maxStaleTime = 120000, maxWaitTime = 30000) {
     const startTime = Date.now();
     
     async function attemptLock() {
@@ -113,11 +89,14 @@ async function acquireLock(scriptName, priority, maxStaleTime = 10000, maxWaitTi
                     priority: priority
                 }
             });
+            console.debug(`${scriptName} got the lock.`);
             return true;
+        } else if ( result.processingLock ) { 
+            console.debug(`Nope.  Lock held by ${result.processingLock.scriptName}`);
         }
         
         if (now - startTime < maxWaitTime) {
-            await new Promise(resolve => setTimeout(resolve, 15000));
+            await sleep (15);
             return attemptLock();
         }
         
@@ -127,9 +106,15 @@ async function acquireLock(scriptName, priority, maxStaleTime = 10000, maxWaitTi
     return attemptLock();
 }
 
+async function sleep ( sleepTime ) {
+    const sleepMS = sleepTime * 1000;
+    await new Promise(resolve => setTimeout(resolve, sleepMS));
+}
+
 async function updateLock(scriptName) {
     const result = await chrome.storage.local.get('processingLock');
     if (result.processingLock && result.processingLock.scriptName === scriptName) {
+        console.log(`Lock going to ${scriptName}, previously held by ${result.processingLock.scriptName}`);
         await chrome.storage.local.set({
             processingLock: {
                 ...result.processingLock,
@@ -137,6 +122,8 @@ async function updateLock(scriptName) {
             }
         });
         return true;
+    } else if ( result.processingLock ) {
+        console.log(`Lock update rejected for ${scriptName}.  Lock held by ${result.processingLock.scriptName}.`);
     }
     return false;
 }

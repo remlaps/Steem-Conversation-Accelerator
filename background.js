@@ -56,8 +56,8 @@ chrome.runtime.onInstalled.addListener( async function (details) {
         const result = await chrome.storage.local.get(['steemObserverName']);
         const steemObserverName = result.steemObserverName;
         if (steemObserverName) {
-            await saveIsCheckingActivity(false);
-            await checkForNewActivitySinceLastNotification(steemObserverName);
+            await saveIsCheckingActivity(false);  // Reset to false in case of reinstall while running.
+            // await checkForNewActivitySinceLastNotification(steemObserverName);
             setupAlarms();
         } else {
             console.log('Steem username not set for SCA. Please set it in the extension settings.');
@@ -119,9 +119,9 @@ chrome.alarms.onAlarm.addListener((alarm) => {
             const steemObserverName = result.steemObserverName;
             if (steemObserverName) {
                 await checkForNewActivitySinceLastNotification(steemObserverName);
-            // } else {
-                // console.log('Alarm triggered, but the Steem username is not set in SCA.');
-                // console.log('Please set it in the extension settings.');
+            } else {
+                console.debug('Alarm triggered, but the Steem username is not set in SCA.');
+                console.debug('Please set it in the extension settings.');
             }
         });
         // console.log("Ending alarm processing.");
@@ -189,10 +189,20 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
 
             // Check every followed account
             for (let i = lastCheckedIndex; i < followingList.length; i++) {
+                if (!(await updateLock('background'))) {  // Check for activityList.js lock
+                    // activityList.js grabbed the lock.  Reset to start over.
+                    isCheckingActivity = false;
+                    await saveIsCheckingActivity(isCheckingActivity);
+                    await chrome.storage.local.set({
+                        lastCheckedIndex: 0,
+                    });
+                    newActivityFound = false;
+                    break;
+                }
                 const followedAccount = followingList[i];
                 try {
                     let searchMin = new Date(`${checkStartTime}`);          // Default in case there is no history for this account.
-                    searchMin = new Date(searchMin.getTime() - 30 * 60 * 1000);    // Back up a half hour in case of API lag.
+                    searchMin = new Date(searchMin.getTime() - 15 * 60 * 1000);    // Back up 15 minutes in case of API lag.
                                                                                 
                     let existingAccountIndex = accountsWithNewActivity.findIndex(item => item.account === followedAccount);
                     if (existingAccountIndex !== -1) {
@@ -220,7 +230,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     }
 
                     // Add a small delay to avoid overwhelming APIs with low rate limits.
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 150));
 
                 } catch (error) {
                     console.error(`Error checking activity for ${followedAccount}:`, error);
@@ -246,12 +256,12 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
 
         } catch (error) {
             console.error('Error checking for new activity since last alert:', error);
-        } finally {
-            await releaseLock();
-            // console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
-        }
+        } // finally {
+        await releaseLock();
+        console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
+        // }
     } else {
-        // console.log('Could not acquire lock in background.js, will try again later');
+        console.debug('Could not acquire lock in background.js, will try again later');
     }
     isCheckingActivity = false;
     await saveIsCheckingActivity(isCheckingActivity);
@@ -365,8 +375,12 @@ async function saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastA
     if (i % 10 === 0) {
         if (!(await updateLock('background'))) {
             // console.log('Lost lock during processing in background.js');
+            // reset to start over.
             isCheckingActivity = false;
             await saveIsCheckingActivity(isCheckingActivity);
+            await chrome.storage.local.set({
+                lastCheckedIndex: 0,
+            });
             return false;
         }
         await chrome.storage.local.set({
@@ -536,7 +550,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
             }
 
             // Add a small delay between requests to avoid rate limiting
-            await delay(200);
+            await delay(100);
         } while (start);
 
         followingList = Array.from(new Set(followingList));
@@ -571,8 +585,9 @@ async function getActivityTime(user, apiNode, startTime) {
     try {
         let lastTransaction = -1;
         const chunkSize = 20;
-        const maxChunks = 40; // This will check up to 800 transactions (40 * 20)
-                              //    - If there are more than 800 transactions for the account after the post/comment/reply, it will be missed.
+        const maxChunks = 20; // This will check up to 400 transactions (20 * 20)
+                              //    - If there are more than 400 transactions for the account after the most recent
+                              //       post/comment/reply, it will be missed.  Voting trails may block some posts.
 
         for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
             if ( lastTransaction > chunkSize ) {
@@ -632,7 +647,7 @@ async function getActivityTime(user, apiNode, startTime) {
             }
 
             // Add a small delay between chunks to avoid rate limiting
-            await delay(200);
+            await delay(100);
         }
 
         return new Date("1970-01-01T00:00:00Z");

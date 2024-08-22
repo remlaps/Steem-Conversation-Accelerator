@@ -73,6 +73,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
     const webServerName = await getWebServerName();
 
     for (const account of uniqueAccountsWithNewActivity) {
+        let lastActivity;
         console.log(`Processing account: ${account.account}`);
         
         await updateLock("activityList");
@@ -83,6 +84,11 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
             const activities = await getAccountActivities(account.account, account.lastDisplayTime, apiEndpoint);
             const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL, account.lastDisplayTime);
             listItem.innerHTML = content;
+            if ( isEmptyActivityList(activities) ) {
+                lastActivity = new Date ( `${account.activityTime}` );
+            } else {
+                lastActivity = getLastActivityTimeFromAll (activities);
+            }
         } catch (error) {
             console.warn(`Error fetching activities for account ${account.account}:`, error);
             listItem.textContent = `Error fetching activities for account ${account.account}`;
@@ -90,18 +96,46 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
         }
 
         accountsList.appendChild(listItem);
-        uniqueAccountsWithNewActivity = updateLastDisplayTime(account.account, uniqueAccountsWithNewActivity);
+        uniqueAccountsWithNewActivity = updateLastDisplayTime(uniqueAccountsWithNewActivity, account.account, lastActivity);
     }
     return uniqueAccountsWithNewActivity;
 }
 
-function updateLastDisplayTime(accountToUpdate, accountsList) {
+function isEmptyActivityList(activities) {
+    const { postList, commentList, replyList } = activities;
+    
+    return (!postList || postList.length === 0) &&
+           (!commentList || commentList.length === 0) &&
+           (!replyList || replyList.length === 0);
+}
+
+function getLastActivityTimeFromAll(activities) {
+    const { postList, commentList, replyList } = activities;
+    let lastActivity = new Date("1970-01-01T00:00:00Z");
+
+    function updateLastActivity(items) {
+        for (const item of items) {
+            const itemTime = new Date(`${item[1].timestamp}Z`);
+            lastActivity = newerDate(lastActivity, itemTime);
+        }
+    }
+
+    updateLastActivity(postList);
+    updateLastActivity(commentList);
+    updateLastActivity(replyList);
+
+    return lastActivity;
+}
+
+function updateLastDisplayTime(accountsList, accountToUpdate, activityTime ) {
+    const activityTimeStr = new Date (`${activityTime}`).toISOString();
     return accountsList.map(item => {
       if (item.account === accountToUpdate) {
-        console.debug(`Account: ${accountToUpdate}, display time: ${item.lastDisplayTime}, activity time: ${item.activityTime}`);
+        // console.debug(`Account: ${accountToUpdate}, display time: ${item.lastDisplayTime}, activity time: ${item.activityTime}`);
         return {
-          ...item,
-          lastDisplayTime: item.activityTime
+          account: accountToUpdate,
+          lastDisplayTime: activityTimeStr,
+          activityTime: activityTimeStr
         };
       }
       return item;
@@ -151,8 +185,8 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
     content += `</li>`;
 
-    console.log(`Returning from createContentItem: ${content}`);
-    console.dir(content);
+    // console.log(`Returning from createContentItem: ${content}`);
+    // console.dir(content);
     return content;
 }
 
@@ -163,10 +197,10 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL)
     let rootInfo;
 
     for (const item of items) {
-        console.debug(`Item: ${item}`);
-        console.log("In processItems for loop.");
-        console.debug(`author: ${item[1].op[1].author}, permlink: ${item[1].op[1].permlink}, api: ${apiEndpoint}`);
-        console.dir(item);
+        // console.debug(`Item: ${item}`);
+        // console.log("In processItems for loop.");
+        console.debug(`timestamp: ${item[1].timestamp}, author: ${item[1].op[1].author}, permlink: ${item[1].op[1].permlink}, api: ${apiEndpoint}`);
+        // console.dir(item);
         if (type !== 'post') {
             rootInfo = await getRootInfo(item[1].op[1].author, item[1].op[1].permlink, apiEndpoint);
             if (rootInfo) {
@@ -237,7 +271,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
         </details>
         `;
 
-    console.debug(`Exiting processAllItems: ${content}`);
+    // console.debug(`Exiting processAllItems: ${content}`);
     return content;
 }
 
@@ -314,12 +348,12 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
 
                 const jsonResponse = await response.json();
                 if (jsonResponse.error) {
-                    if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
+                    // if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
                         await new Promise(resolve => setTimeout(resolve, 1000));
                         retries--;
-                    } else {
-                        return jsonResponse;
-                    }
+                    // } else {
+                    //     return jsonResponse;
+                    // }
                 } else {
                     return jsonResponse;
                 }
@@ -329,7 +363,8 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                 retries--;
             }
         }
-        throw new Error('Failed to fetch account history after all retries');
+        console.warn('Failed to fetch account history after all retries');
+        return null;
     }
 
     while (true) {
@@ -338,7 +373,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
 
         // Process activities in reverse order (from most recent to oldest)
         for (let i = activities.result.length - 1; i >= 0; i--) {
-            console.debug(`Checking ${activities.result[i]} in fetchAccountHistory`);
+            // console.debug(`Checking ${activities.result[i]} in fetchAccountHistory`);
             const activity = activities.result[i];
             const [id, { timestamp, op }] = activity;
             const transactionTimeStamp = new Date(`${timestamp}Z`).getTime();
@@ -347,7 +382,7 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
                 return { postList, commentList, replyList };
             }
 
-            console.debug(`id: ${id}, timestamp: ${timestamp}, ttstamp: ${transactionTimeStamp}, startTime: ${startTimeStamp}, Operation: ${op[0]}`);
+            // console.debug(`id: ${id}, timestamp: ${timestamp}, ttstamp: ${transactionTimeStamp}, startTime: ${startTimeStamp}, Operation: ${op[0]}`);
             if (op[0] === "comment") {
                 const [, { parent_author, author }] = op;
                 if (!parent_author) {
