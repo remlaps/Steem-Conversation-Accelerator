@@ -26,21 +26,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 previousAlertTimeField.textContent = lastActivityPageViewTime;
             }
 
-            // console.log(`accountsWithNewAcitivty before splitting: ${accountsWithNewActivity}`);
             let uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
-            const listSize = uniqueAccountsWithNewActivity.length;
-            const accountsList = document.getElementById('accountsList');
             uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity);
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
-            // There's almost certainly a race condition with background.js here, but I am too tired to think about it ATM.
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
                 .then(() => {
                     console.log("Accounts with new activity successfully saved!");
                     console.dir(uniqueAccountsWithNewActivity);
                 })
                 .catch(error => {
-                    console.error("Error clearing accounts:", error);
+                    console.warn("Error clearing accounts:", error);
                 });
         } finally {
             await chrome.storage.local.set({
@@ -72,31 +68,45 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
     const apiEndpoint = await getApiServerName();
     const webServerName = await getWebServerName();
 
-    for (const account of uniqueAccountsWithNewActivity) {
+    for (const followedAccountObj of uniqueAccountsWithNewActivity) {
         let lastActivity;
-        console.log(`Processing account: ${account.account}`);
+        console.log(`Processing account: ${followedAccountObj.account}`);
         
         await updateLock("activityList");
         const listItem = document.createElement('li');
-        const accountURL = `${webServerName}/@${account.account}`;
+        const accountURL = `${webServerName}/@${followedAccountObj.account}`;
+        let activities = {
+            postList: [],
+            commentList: [],
+            replyList: []
+          };
 
         try {
-            const activities = await getAccountActivities(account.account, account.lastDisplayTime, apiEndpoint);
-            const content = await processAllItems(...Object.values(activities), account.account, apiEndpoint, webServerName, accountURL, account.lastDisplayTime);
-            listItem.innerHTML = content;
+            console.debug(`Account: ${followedAccountObj.account}, Display string: ${followedAccountObj.lastDisplayTime}, 
+                last display time: ${followedAccountObj.activityTime}`);
+
+            // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
+            // This means that some accounts with updates might not display until after the next polling cycle.
+            if ( new Date (followedAccountObj.lastDisplayTime ) < new Date ( followedAccountObj.activityTime ) ) {
+                console.debug(`Going deeper for ${followedAccountObj.account}`);
+                activities = await getAccountActivities(followedAccountObj.account, followedAccountObj.lastDisplayTime, apiEndpoint);
+                const content = await processAllItems(...Object.values(activities), followedAccountObj.account, apiEndpoint, webServerName,
+                    accountURL, followedAccountObj.lastDisplayTime);
+                listItem.innerHTML = content;
+            }
             if ( isEmptyActivityList(activities) ) {
-                lastActivity = new Date ( `${account.activityTime}` );
+                lastActivity = new Date ( `${followedAccountObj.activityTime}` );
             } else {
                 lastActivity = getLastActivityTimeFromAll (activities);
             }
         } catch (error) {
-            console.warn(`Error fetching activities for account ${account.account}:`, error);
-            listItem.textContent = `Error fetching activities for account ${account.account}`;
+            console.warn(`Error fetching activities for account ${followedAccountObj.account}:`, error);
+            // listItem.textContent = `Error fetching activities for account ${followedAccountObj.account}`;
             continue;
         }
 
         accountsList.appendChild(listItem);
-        uniqueAccountsWithNewActivity = updateLastDisplayTime(uniqueAccountsWithNewActivity, account.account, lastActivity);
+        uniqueAccountsWithNewActivity = updateLastDisplayTime(uniqueAccountsWithNewActivity, followedAccountObj.account, lastActivity);
     }
     return uniqueAccountsWithNewActivity;
 }
@@ -429,19 +439,13 @@ async function getRootInfo(author, permlink, apiEndpoint) {
             root_title: content.root_title
         };
     } catch (error) {
-        console.error("Error:", error);
+        console.warn("Error:", error);
         return null; // Or handle the error differently
     }
 }
 
 function newerDate(date1, date2) {
     return new Date(date1) > new Date(date2) ? date1 : date2;
-}
-
-function showTriplet(showAccount) {
-    console.log(`Steem account: ${showAccount.account}`);
-    console.log(`Last activity: ${showAccount.activityTime}`);
-    console.log(`Last display: ${showAccount.lastDisplayTime}`);
 }
 
 /*

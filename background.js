@@ -10,7 +10,10 @@
 /*
  *  Import additional functions for accessing, locking, and mamipulating local storage.
  */
+importScripts ('commonUtils.js');
 importScripts('localStorageUtils.js');
+importScripts('steemHelpers.js');
+
 let isCheckingActivity = false;
 saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorageUtils.js"
 
@@ -63,7 +66,7 @@ chrome.runtime.onInstalled.addListener( async function (details) {
             console.log('Steem username not set for SCA. Please set it in the extension settings.');
         }
     } catch (error) {
-        console.error('Error loading storage:', error);
+        console.warn('Error loading storage:', error);
     }
 
     showAlarms();
@@ -233,7 +236,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     await new Promise(resolve => setTimeout(resolve, 150));
 
                 } catch (error) {
-                    console.error(`Error checking activity for ${followedAccount}:`, error);
+                    console.warn(`Error checking activity for ${followedAccount}:`, error);
                     continue;
                 }
             }
@@ -241,6 +244,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
             console.log("Done checking activity times.");
             console.log(`newActivityFound: ${newActivityFound}`);
             console.log(`accountsWithNewActivity: ${JSON.stringify(accountsWithNewActivity)}`);
+            console.log(`List size: ${accountsWithNewActivity.length}`);
 
             if (newActivityFound) {
                 await handleNewActivity(accountsWithNewActivity, currentCheckTime);
@@ -255,11 +259,11 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
             });
 
         } catch (error) {
-            console.error('Error checking for new activity since last alert:', error);
-        } // finally {
-        await releaseLock();
-        console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
-        // }
+            console.warn('Error checking for new activity since last alert:', error);
+        } finally {
+            await releaseLock('background');
+            console.log(`array lock cleared in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
+        }
     } else {
         console.debug('Could not acquire lock in background.js, will try again later');
     }
@@ -288,6 +292,7 @@ function countNewActivities(accountsWithNewActivity) {
 
         if (activityTime > lastDisplayTime) {
             count++;
+            showTriplet(accountsWithNewActivity[i]);
         }
     }
 
@@ -305,7 +310,7 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
             console.warn(`Error in getActivityTimeWithRetry for ${followedAccount}:`, error);
         }
         
-        const waitTime = Math.min(1000 * Math.pow(2, i), 4000); // Exponential backoff, max 30 seconds
+        const waitTime = Math.min(1000 * Math.pow(2, i), 4000); // Exponential backoff, max 4 seconds
         console.warn(`Failed to get activity time for ${followedAccount}. Retrying in ${waitTime/1000} seconds... (${retries - i - 1} retries left)`);
         await delay(waitTime);
     }
@@ -366,7 +371,7 @@ async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
         await displayBrowserNotification(notificationMessage);
         // console.log("Browser notification displayed successfully.");
     } catch (error) {
-        console.error("Error displaying browser notification:", error);
+        console.warn("Error displaying browser notification:", error);
     }
 }
 
@@ -518,7 +523,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
                                 return await getFollowingList(steemObserverName, apiNode, limit);
                             } catch (error) {
                                 if (i === maxRetries - 1) {
-                                    console.error(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
+                                    console.warn(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
                                     throw error;
                                 }
                                 const waitTime = Math.min(1000 * Math.pow(2, i), 4000);
@@ -545,7 +550,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
                     partialFollowingList: followingList
                 });
             } else {
-                console.error('Unexpected API response structure:', data);
+                console.warn('Unexpected API response structure:', data);
                 break;
             }
 
@@ -556,7 +561,7 @@ async function getFollowingList(steemObserverName, apiNode, limit = 100, maxRetr
         followingList = Array.from(new Set(followingList));
         return followingList;
     } catch (error) {
-        console.error('Error fetching following list:', error);
+        console.warn('Error fetching following list:', error);
         await chrome.storage.local.set({
             lastFetchedUser: start,
             partialFollowingList: followingList
@@ -571,7 +576,7 @@ async function getFollowingListWithRetry(steemObserverName, apiNode, limit = 100
             return await getFollowingList(steemObserverName, apiNode, limit);
         } catch (error) {
             if (i === maxRetries - 1) {
-                console.error(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
+                console.warn(`Failed to get following list for ${steemObserverName} after ${maxRetries} attempts.`);
                 throw error;
             }
             const waitTime = Math.min(1000 * Math.pow(2, i), 4000);
