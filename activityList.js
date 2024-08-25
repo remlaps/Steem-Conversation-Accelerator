@@ -202,7 +202,17 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
         `;
 
     if (postList.length > 0) {
-        content += `
+        if (postList.length < 3) {
+            content += `
+            <details class="content-details posts-details" open>
+                <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
+                <div class="content-inner posts-content">
+                    ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL)}
+                </div>
+            </details>
+        `;
+        } else {
+            content += `
                 <details class="content-details posts-details">
                     <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
                     <div class="content-inner posts-content">
@@ -210,10 +220,21 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
                     </div>
                 </details>
             `;
+        }
     }
 
     if (commentList.length > 0) {
-        content += `
+        if (commentList.length < 3) {
+            content += `
+            <details class="content-details comments-details">
+                <summary class="content-summary" open><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
+                <div class="content-inner comments-content">
+                    ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL)}
+                </div>
+            </details>
+        `;
+        } else {
+            content += `
                 <details class="content-details comments-details">
                     <summary class="content-summary"><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
                     <div class="content-inner comments-content">
@@ -221,10 +242,21 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
                     </div>
                 </details>
             `;
+        }
     }
 
     if (replyList.length > 0) {
-        content += `
+        if (replyList.length < 3) {
+            content += `
+            <details class="content-details replies-details" open>
+                <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
+                <div class="content-inner replies-content">
+                    ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL)}
+                </div>
+            </details>
+        `;
+        } else {
+            content += `
                 <details class="content-details replies-details">
                     <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
                     <div class="content-inner replies-content">
@@ -232,6 +264,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
                     </div>
                 </details>
             `;
+        }
     }
 
     content += `

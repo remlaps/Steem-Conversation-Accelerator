@@ -2,6 +2,8 @@
 
 The Steem Conversation Accelerator is a browser extension that enhances our experience on the Steem platform by sending notifications in the browser when activity of interest occurs on the Steem blockchain.  When the notification is clicked, it opens a browser tab with a list of the recently observed activities.
 
+If the browser goes idle and stays that way for 10 minutes, background polling will stop until it becomes active again.
+
 ## Monitored activities
 ### In progress / active
 - [x] Notification of posts, comments, and replies for accounts that are followed by the observer account.
