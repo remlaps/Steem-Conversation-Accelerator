@@ -4,12 +4,12 @@ The Steem Conversation Accelerator is a browser extension that enhances our expe
 
 ## Monitored activities
 ### In progress / active
-- Notification of posts, comments, and replies for accounts that are followed by the observer account.
+- [x] Notification of posts, comments, and replies for accounts that are followed by the observer account.
 
 ### TBD
-o Notification of activity on threads that the observer account has participated in.
-o Notifications of activity in communities that the observer account subscribes to.
-o Visibility (without notifications) for posts that are supported by token-burning/post-promotion activities.
+- [ ] Notification of activity on threads that the observer account has participated in.
+- [ ] Notifications of activity in communities that the observer account subscribes to.
+- [ ] Visibility (without notifications) for posts that are supported by token-burning/post-promotion activities.
 
 ## Files
 
