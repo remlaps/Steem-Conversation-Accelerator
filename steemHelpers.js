@@ -1,5 +1,112 @@
+async function getAccountActivities(account, startTime, apiEndpoint) {
+    const startTimeStamp = new Date(startTime).getTime();
+    let postList = [], commentList = [], replyList = [];
+    let lastId = -1;
+    const chunkSize = 20;
+
+    async function fetchAccountHistory(lastId, limit, retries = 10) {
+        while (retries > 0) {
+            try {
+                const response = await fetch(apiEndpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        jsonrpc: "2.0",
+                        method: "condenser_api.get_account_history",
+                        params: [account, lastId, limit],
+                        id: 1
+                    })
+                });
+
+                const jsonResponse = await response.json();
+                if (jsonResponse.error) {
+                    // if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
+                        await new Promise(resolve => setTimeout(resolve, 1000));
+                        retries--;
+                    // } else {
+                    //     return jsonResponse;
+                    // }
+                } else {
+                    return jsonResponse;
+                }
+            } catch (error) {
+                console.warn(`Error fetching account history, retrying. Attempts left: ${retries}`);
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                retries--;
+            }
+        }
+        console.warn('Failed to fetch account history after all retries');
+        return null;
+    }
+
+    while (true) {
+        const activities = await fetchAccountHistory(lastId, chunkSize);
+        if (!activities.result || activities.result.length === 0) break;
+
+        // Process activities in reverse order (from most recent to oldest)
+        for (let i = activities.result.length - 1; i >= 0; i--) {
+            // console.debug(`Checking ${activities.result[i]} in fetchAccountHistory`);
+            const activity = activities.result[i];
+            const [id, { timestamp, op }] = activity;
+            const transactionTimeStamp = new Date(`${timestamp}Z`).getTime();
+
+            if (transactionTimeStamp <= startTimeStamp) {
+                return { postList, commentList, replyList };
+            }
+
+            // console.debug(`id: ${id}, timestamp: ${timestamp}, ttstamp: ${transactionTimeStamp}, startTime: ${startTimeStamp}, Operation: ${op[0]}`);
+            if (op[0] === "comment") {
+                const [, { parent_author, author }] = op;
+                if (!parent_author) {
+                    postList.push(activity);
+                } else if (author === account) {
+                    commentList.push(activity);
+                } else {
+                    replyList.push(activity);
+                }
+            }
+
+            lastId = id - 1;
+        }
+    }
+
+    return { postList, commentList, replyList };
+}
+
+async function getRootInfo(author, permlink, apiEndpoint) {
+    const url = apiEndpoint;
+    const data = JSON.stringify({
+        jsonrpc: "2.0",
+        method: "condenser_api.get_content",
+        params: [author, permlink],
+        id: 1
+    });
+
+    try {
+        const response = await fetch(url, {
+            method: "POST",
+            body: data,
+            headers: { "Content-Type": "application/json" }
+        });
+
+        if (!response.ok) {
+            throw new Error(`Error fetching content: ${response.status}`);
+        }
+
+        const jsonData = await response.json();
+        const content = jsonData.result;
+        return {
+            root_author: content.root_author,
+            root_permlink: content.root_permlink,
+            root_title: content.root_title
+        };
+    } catch (error) {
+        console.warn("Error:", error);
+        return null; // Or handle the error differently
+    }
+}
+
 /*
- *   - This file is not presently in use, but it will start holding Steem-related helper functions
  *
  *   - fastActivityCheckWithRetry and fastActivityCheck come from the first iteration of getAcctivityTime, but
  *     they are problematic 'cause they don't report on reply times.  They may eventually be useful, but they're

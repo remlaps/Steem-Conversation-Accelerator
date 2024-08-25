@@ -369,7 +369,7 @@ async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
     });
     try {
         await displayBrowserNotification(notificationMessage);
-        // console.log("Browser notification displayed successfully.");
+        console.log("Browser notification displayed successfully.");
     } catch (error) {
         console.warn("Error displaying browser notification:", error);
     }
@@ -433,7 +433,7 @@ function updateExistingAccountActivity(existingAccountIndex, lastAccountActivity
 }
 
 async function displayBrowserNotification(message) {
-    // console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
+    console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
 
     // Clear all notifications created by this extension
     await chrome.notifications.getAll(function (notifications) {
@@ -441,9 +441,9 @@ async function displayBrowserNotification(message) {
             if (notifications.hasOwnProperty(notificationId)) {
                 chrome.notifications.clear(notificationId, function (wasCleared) {
                     if (wasCleared) {
-                        // console.log(`Notification ${notificationId} cleared.`);
+                        console.log(`Notification ${notificationId} cleared.`);
                     } else {
-                        // console.log(`Notification ${notificationId} could not be cleared.`);
+                        console.log(`Notification ${notificationId} could not be cleared.`);
                     }
                 });
             }
@@ -451,7 +451,7 @@ async function displayBrowserNotification(message) {
     });
 
     // Create a new notification
-    chrome.notifications.create({
+    await chrome.notifications.create({
         type: 'basic',
         iconUrl: 'SCAicon.png',
         title: 'Steem Activity Alert',

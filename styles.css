@@ -1,5 +1,5 @@
 :root {
-    --altBgColor: #d9edf7;
+    --altBgColor: silver;
   }
 
   body, html {
@@ -16,7 +16,7 @@
   }
   
   footer {
-      height: 15%;
+      height: 5%;
       border-left: 5px solid grey;
       border-right: 5px solid grey;
       border-bottom: 5px solid grey;
@@ -34,7 +34,7 @@
   
   .main-content {
       flex: 1;
-      padding: 20px;
+      padding: 5px;
       overflow-y: auto;
   }
   
@@ -61,7 +61,7 @@
       border-radius: 5px;
       padding: 5px;
       margin-bottom: 5px;
-      background-color: #bfd7fa;
+      background-color: rgb(215, 225, 225);
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
       width: 120%;
       /* max-width: 80vw; */
@@ -71,48 +71,55 @@
   .indented-content {
       margin-left: 20px;
       width: 80%;
-  }
-
-  /* 
-   * Color scheme from Google Gemini
-   */
+      margin-bottom: 0px;
+    }
 
   /* Target the title-block section */
 .SCA-intro {
     /* Adjust background color as needed */
-    background-color: #2dafeb9c;
-    padding: 20px;
+    background-color: rgb(16, 122, 16);  /* Sort-of kelley-greenish */
+    padding: 0px;
     text-align: center;
     /* Center the content horizontally */
-    border-top: 5px solid grey;
-    border-left: 5px solid grey;
-    border-right: 5px solid grey;
+    border-top: 1px solid grey;
+    border-left: 1px solid grey;
+    border-right: 1px solid grey;
 }
 
 /* Style the h1 element with class "title-1" */
 .SCA-intro h1.title-1 {
-    font-size: 24px;
+    /* Adjust left margin to create space between the icon and the title */
+    margin-left: 0px; /* Adjust value as needed */
+    font-size: 26px;
     font-weight: bold;
     color: gold;
-    margin-bottom: 10px;
-}
+    margin-bottom: 0px;
+    text-shadow: 2px 2px 2px black;
+  }
 
 /* Style the h2 element with class "title-2" */
 .SCA-intro h2.title-2 {
-    font-size: 20px;
-    color:  gold;
+    margin-left: 0px;
+    /* Adjust value as needed */
+    font-size: 22px;
+    color: gold;
+    text-shadow: 2px 2px 2px black;
 }
 
 .status-box {
-    padding: 5px; /* Adjust padding as needed */
-    width:60%
-  }
-  
-  .status-box p {
-    color: navy;
-    font-size: 18;
+    padding: 20px;
+    /* Adjust padding as needed */
+    width: 70%;
+    margin-bottom: 0px;
+}
+
+.status-box p {
+    color: gold;
+    font-size: 20;
     font-weight: bold;
-  }
+    text-shadow: 2px 2px 2px black;
+    margin-bottom: 0px;
+}
   
   /*
   * Nested and collapbsible sections
@@ -124,9 +131,9 @@
 }
 
 .account-summary {
-    padding: 10px;
+    padding: 5px;
     cursor: pointer;
-    background-color: #2d2deb;
+    background-color: rgb(16, 122, 16);  /* Sort-of kelley-greenish */
     color: gold;
 }
 
@@ -136,37 +143,40 @@
   }
 
 .account-content {
-    padding: 10px;
+    padding: 5px;
 }
 
 .content-details {
     margin-left: 20px;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     border: 1px solid #ddd;
     border-radius: 5px;
 }
 
 .content-summary {
-    padding: 8px;
+    padding: 5px;
     cursor: pointer;
-    background-color: rgb(215, 225, 225);
-    color: royalblue;
+    background-color: rgb(164, 219, 203);
+    color: rgb(16, 122, 16);  /* Sort-of kelley-greenish */
 }
 
 .content-inner {
-    padding: 10px;
+    padding: 5px;
 }
 
 /* SCA Logo location */
 #sca-icon {
-    position: fixed;
-    top: 5px;
+    /* Position the icon at the left-hand border and align it with the titles */
+    position: absolute;
     left: 5px;
-    width: 128px;  /* Adjust size as needed */
+    top: 74px; /* Adjust top position as needed */
+    transform: translateY(-50%); /* Center vertically */
+    width: 128px;
     height: auto;
-    z-index: 1000;  /* Ensures the icon stays on top of other content */
-    border: 5px solid gold;
+    z-index: 1000;
+    border: 3px solid rgba(150, 201, 190, 0.664);
 }
+
 
 /* Optional: Specific styling for different content types */
 .posts-details { border-color: #ffcccc; }

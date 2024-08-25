@@ -57,7 +57,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 }); // End of document.addEventListener()
 
 /*
- * Create the HTML for the posts, replies,a nd comments.
+ * Create the HTML for the posts, replies, and comments.
  */
 async function updateAccountsList(uniqueAccountsWithNewActivity) {
     if (uniqueAccountsWithNewActivity.length === 0) {
@@ -111,47 +111,6 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
     return uniqueAccountsWithNewActivity;
 }
 
-function isEmptyActivityList(activities) {
-    const { postList, commentList, replyList } = activities;
-    
-    return (!postList || postList.length === 0) &&
-           (!commentList || commentList.length === 0) &&
-           (!replyList || replyList.length === 0);
-}
-
-function getLastActivityTimeFromAll(activities) {
-    const { postList, commentList, replyList } = activities;
-    let lastActivity = new Date("1970-01-01T00:00:00Z");
-
-    function updateLastActivity(items) {
-        for (const item of items) {
-            const itemTime = new Date(`${item[1].timestamp}Z`);
-            lastActivity = newerDate(lastActivity, itemTime);
-        }
-    }
-
-    updateLastActivity(postList);
-    updateLastActivity(commentList);
-    updateLastActivity(replyList);
-
-    return lastActivity;
-}
-
-function updateLastDisplayTime(accountsList, accountToUpdate, activityTime ) {
-    const activityTimeStr = new Date (`${activityTime}`).toISOString();
-    return accountsList.map(item => {
-      if (item.account === accountToUpdate) {
-        // console.debug(`Account: ${accountToUpdate}, display time: ${item.lastDisplayTime}, activity time: ${item.activityTime}`);
-        return {
-          account: accountToUpdate,
-          lastDisplayTime: activityTimeStr,
-          activityTime: activityTimeStr
-        };
-      }
-      return item;
-    });
-  }
-
 function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
 
@@ -169,10 +128,9 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
         return `<li class="post-box">Error: Invalid ${type} data</li>`;
     }
 
-
-    const plainBody = convertToPlainText(body);
+    const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
     const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
-
+    
     let content = `<li class="post-box">`;
 
     if (type === 'post') {
@@ -238,14 +196,14 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
     }
 
     let content = `
-        <details class="account-details">
+        <details class="account-details" open>
             <summary class="account-summary"><strong><a href="${webServerName}/@${account}" target="_blank">${account}</a></strong>: Activity after ${lastDisplayTime}</summary>
             <div class="account-content">
         `;
 
     if (postList.length > 0) {
         content += `
-                <details class="content-details posts-details" open>
+                <details class="content-details posts-details">
                     <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
                     <div class="content-inner posts-content">
                         ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL)}
@@ -256,7 +214,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
 
     if (commentList.length > 0) {
         content += `
-                <details class="content-details comments-details" open>
+                <details class="content-details comments-details">
                     <summary class="content-summary"><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
                     <div class="content-inner comments-content">
                         ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL)}
@@ -267,7 +225,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
 
     if (replyList.length > 0) {
         content += `
-                <details class="content-details replies-details" open>
+                <details class="content-details replies-details">
                     <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
                     <div class="content-inner replies-content">
                         ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL)}
@@ -283,20 +241,6 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
 
     // console.debug(`Exiting processAllItems: ${content}`);
     return content;
-}
-
-
-// Function to retrieve stored accountsWithNewActivity from chrome.storage.local
-async function getStoredAccountsWithNewActivity() {
-    return new Promise((resolve, reject) => {
-        chrome.storage.local.get('accountsWithNewActivity', function (result) {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-            } else {
-                resolve(result.accountsWithNewActivity);
-            }
-        });
-    });
 }
 
 function convertToPlainText(html) {
@@ -320,149 +264,4 @@ function convertToPlainText(html) {
     text = text.replace(/[#*_~`]/g, '');
 
     return text.trim();
-}
-
-// Function to clear stored accountsWithNewActivity in chrome.storage.local
-async function saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity) {
-    return new Promise((resolve, reject) => {
-        console.log("Inside: saveStoredAccountsWithNewActivity");
-        chrome.storage.local.set({ 'accountsWithNewActivity': JSON.stringify(uniqueAccountsWithNewActivity) }, function () {
-            if (chrome.runtime.lastError) {
-                reject(chrome.runtime.lastError);
-            } else {
-                resolve();
-            }
-        });
-    });
-}
-
-async function getAccountActivities(account, startTime, apiEndpoint) {
-    const startTimeStamp = new Date(startTime).getTime();
-    let postList = [], commentList = [], replyList = [];
-    let lastId = -1;
-    const chunkSize = 20;
-
-    async function fetchAccountHistory(lastId, limit, retries = 10) {
-        while (retries > 0) {
-            try {
-                const response = await fetch(apiEndpoint, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        jsonrpc: "2.0",
-                        method: "condenser_api.get_account_history",
-                        params: [account, lastId, limit],
-                        id: 1
-                    })
-                });
-
-                const jsonResponse = await response.json();
-                if (jsonResponse.error) {
-                    // if (jsonResponse.error.code === -32801 || jsonResponse.error.code === -32603) {
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        retries--;
-                    // } else {
-                    //     return jsonResponse;
-                    // }
-                } else {
-                    return jsonResponse;
-                }
-            } catch (error) {
-                console.warn(`Error fetching account history, retrying. Attempts left: ${retries}`);
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                retries--;
-            }
-        }
-        console.warn('Failed to fetch account history after all retries');
-        return null;
-    }
-
-    while (true) {
-        const activities = await fetchAccountHistory(lastId, chunkSize);
-        if (!activities.result || activities.result.length === 0) break;
-
-        // Process activities in reverse order (from most recent to oldest)
-        for (let i = activities.result.length - 1; i >= 0; i--) {
-            // console.debug(`Checking ${activities.result[i]} in fetchAccountHistory`);
-            const activity = activities.result[i];
-            const [id, { timestamp, op }] = activity;
-            const transactionTimeStamp = new Date(`${timestamp}Z`).getTime();
-
-            if (transactionTimeStamp <= startTimeStamp) {
-                return { postList, commentList, replyList };
-            }
-
-            // console.debug(`id: ${id}, timestamp: ${timestamp}, ttstamp: ${transactionTimeStamp}, startTime: ${startTimeStamp}, Operation: ${op[0]}`);
-            if (op[0] === "comment") {
-                const [, { parent_author, author }] = op;
-                if (!parent_author) {
-                    postList.push(activity);
-                } else if (author === account) {
-                    commentList.push(activity);
-                } else {
-                    replyList.push(activity);
-                }
-            }
-
-            lastId = id - 1;
-        }
-    }
-
-    return { postList, commentList, replyList };
-}
-
-async function getRootInfo(author, permlink, apiEndpoint) {
-    const url = apiEndpoint;
-    const data = JSON.stringify({
-        jsonrpc: "2.0",
-        method: "condenser_api.get_content",
-        params: [author, permlink],
-        id: 1
-    });
-
-    try {
-        const response = await fetch(url, {
-            method: "POST",
-            body: data,
-            headers: { "Content-Type": "application/json" }
-        });
-
-        if (!response.ok) {
-            throw new Error(`Error fetching content: ${response.status}`);
-        }
-
-        const jsonData = await response.json();
-        const content = jsonData.result;
-        return {
-            root_author: content.root_author,
-            root_permlink: content.root_permlink,
-            root_title: content.root_title
-        };
-    } catch (error) {
-        console.warn("Error:", error);
-        return null; // Or handle the error differently
-    }
-}
-
-function newerDate(date1, date2) {
-    return new Date(date1) > new Date(date2) ? date1 : date2;
-}
-
-/*
- * Remove duplicates using a Set and convert back to an Array
- */
-function filterUniqueAccounts(accountsWithNewActivity) {
-    const parsedAccounts = JSON.parse(accountsWithNewActivity);
-    
-    const uniqueAccounts = parsedAccounts.reduce((acc, item) => {
-        if (!acc[item.account]) {
-            acc[item.account] = item;
-        } else {
-            acc[item.account].activityTime = newerDate(acc[item.account].activityTime, item.activityTime);
-            acc[item.account].lastDisplayTime = newerDate(acc[item.account].lastDisplayTime, item.lastDisplayTime);
-        }
-        return acc;
-    }, {});
-
-    return Object.values(uniqueAccounts);
 }
