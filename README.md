@@ -8,7 +8,7 @@ If the browser goes idle and stays that way for 10 minutes, background polling w
 ### In progress / active
 - [x] Notification of posts, comments, and replies for accounts that are followed by the observer account.
 
-### TBD
+### TODO
 - [ ] Notification of activity on threads that the observer account has participated in.
 - [ ] Notifications of activity in communities that the observer account subscribes to.
 - [ ] Visibility (without notifications) for posts that are supported by token-burning/post-promotion activities.
@@ -84,7 +84,7 @@ Thank you for your interest in contributing to the Steem Conversation Accelerato
 
 ### Code Style and Guidelines
 
-- TBD
+- TODO
 
 ### Issues and Bugs
 

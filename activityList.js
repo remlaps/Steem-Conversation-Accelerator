@@ -133,8 +133,9 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     
     let content = `<li class="post-box">`;
 
+    content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${timestamp}</a><br>`;
     if (type === 'post') {
-        content += `<strong>Post: <A HREF="${accountURL}/${permlink}" target="_blank">${title}</a></strong><br>`;
+        content += `<strong>Post: <A HREF="${accountURL}/${permlink}" target="_blank">${title}</a></strong>`;
     } else {
         // For comments and replies
 
@@ -149,8 +150,9 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
         }
     }
 
-    content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${timestamp}</a><br><br>`;
+    content += '<br><br>';
     content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
+    content += '<br>';
     content += `</li>`;
 
     // console.log(`Returning from createContentItem: ${content}`);
@@ -201,71 +203,9 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
             <div class="account-content">
         `;
 
-    if (postList.length > 0) {
-        if (postList.length < 3) {
-            content += `
-            <details class="content-details posts-details" open>
-                <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
-                <div class="content-inner posts-content">
-                    ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL)}
-                </div>
-            </details>
-        `;
-        } else {
-            content += `
-                <details class="content-details posts-details">
-                    <summary class="content-summary"><a href="${webServerName}/@${account}/posts" target="_blank">Posts (${postList.length}</a>)</summary>
-                    <div class="content-inner posts-content">
-                        ${await processItems(postList, 'post', apiEndpoint, webServerName, accountURL)}
-                    </div>
-                </details>
-            `;
-        }
-    }
-
-    if (commentList.length > 0) {
-        if (commentList.length < 3) {
-            content += `
-            <details class="content-details comments-details">
-                <summary class="content-summary" open><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
-                <div class="content-inner comments-content">
-                    ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL)}
-                </div>
-            </details>
-        `;
-        } else {
-            content += `
-                <details class="content-details comments-details">
-                    <summary class="content-summary"><a href="${webServerName}/@${account}/comments" target="_blank">Comments (${commentList.length}</a>)</summary>
-                    <div class="content-inner comments-content">
-                        ${await processItems(commentList, 'comment', apiEndpoint, webServerName, accountURL)}
-                    </div>
-                </details>
-            `;
-        }
-    }
-
-    if (replyList.length > 0) {
-        if (replyList.length < 3) {
-            content += `
-            <details class="content-details replies-details" open>
-                <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
-                <div class="content-inner replies-content">
-                    ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL)}
-                </div>
-            </details>
-        `;
-        } else {
-            content += `
-                <details class="content-details replies-details">
-                    <summary class="content-summary"><a href="${webServerName}/@${account}/replies" target="_blank">Replies (${replyList.length}</a>)</summary>
-                    <div class="content-inner replies-content">
-                        ${await processItems(replyList, 'reply', apiEndpoint, webServerName, accountURL)}
-                    </div>
-                </details>
-            `;
-        }
-    }
+    content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, accountURL);
+    content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, accountURL);
+    content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, accountURL);
 
     content += `
             </div>
@@ -274,6 +214,22 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
 
     // console.debug(`Exiting processAllItems: ${content}`);
     return content;
+}
+
+async function generateContentSection(list, type, webServerName, account, apiEndpoint, accountURL) {
+    // if (list.length === 0) return '';
+
+    const isOpen = list.length < 3 ? 'open' : '';
+    const pluralType = type === 'reply' ? 'replies' : `${type}s`;
+    
+    return `
+        <details class="content-details ${pluralType}-details" ${isOpen}>
+            <summary class="content-summary"><a href="${webServerName}/@${account}/${pluralType}" target="_blank">${pluralType.charAt(0).toUpperCase() + pluralType.slice(1)} (${list.length}</a>)</summary>
+            <div class="content-inner ${pluralType}-content">
+                ${await processItems(list, type, apiEndpoint, webServerName, accountURL)}
+            </div>
+        </details>
+    `;
 }
 
 function convertToPlainText(html) {

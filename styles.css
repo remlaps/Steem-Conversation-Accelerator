@@ -1,5 +1,5 @@
 :root {
-    --altBgColor: silver;
+    --altBgColor: rgb(220, 226, 226);
   }
 
   body, html {
@@ -34,7 +34,7 @@
   
   .main-content {
       flex: 1;
-      padding: 5px;
+      /* padding: 5px; */
       overflow-y: auto;
   }
   
@@ -59,25 +59,26 @@
   .post-box {
       border: 1px solid #ccc;
       border-radius: 5px;
-      padding: 5px;
+      padding: 2px;
       margin-bottom: 5px;
-      background-color: rgb(215, 225, 225);
+      background-color: lightgrey;
       box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-      width: 120%;
+      width: 100%;
       /* max-width: 80vw; */
       box-sizing: border-box;
   }
 
-  .indented-content {
-      margin-left: 20px;
-      width: 80%;
+  .internal-content {
+      /* margin-left: 20px; */
+      width: 100%;
       margin-bottom: 0px;
+      padding: 2px;
     }
 
   /* Target the title-block section */
 .SCA-intro {
     /* Adjust background color as needed */
-    background-color: rgb(16, 122, 16);  /* Sort-of kelley-greenish */
+    background-color: navy; 
     padding: 0px;
     text-align: center;
     /* Center the content horizontally */
@@ -125,16 +126,17 @@
   * Nested and collapbsible sections
   */
   .account-details {
-    margin-bottom: 15px;
+    margin-bottom: 5px;
     border: 1px solid #ccc;
     border-radius: 5px;
 }
 
 .account-summary {
-    padding: 5px;
+    padding: 2px;
     cursor: pointer;
-    background-color: rgb(16, 122, 16);  /* Sort-of kelley-greenish */
+    background-color: navy;
     color: gold;
+    text-shadow: 2px 2px 2px black;
 }
 
 .account-summary a {
@@ -143,25 +145,27 @@
   }
 
 .account-content {
-    padding: 5px;
+    padding: 2px;
+    background-color: royalblue;
 }
 
 .content-details {
-    margin-left: 20px;
-    margin-bottom: 5px;
+    margin-left: 2px;
+    margin-bottom: 2px;
     border: 1px solid #ddd;
-    border-radius: 5px;
+    border-radius: 2px;
 }
 
 .content-summary {
-    padding: 5px;
+    padding: 2px;
     cursor: pointer;
-    background-color: rgb(164, 219, 203);
-    color: rgb(16, 122, 16);  /* Sort-of kelley-greenish */
+    background-color: lightskyblue;
+    color: navy;
 }
 
 .content-inner {
-    padding: 5px;
+    padding: 2px;
+    background-color: antiquewhite;
 }
 
 /* SCA Logo location */
