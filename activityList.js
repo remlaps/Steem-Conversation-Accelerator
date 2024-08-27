@@ -217,7 +217,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
 }
 
 async function generateContentSection(list, type, webServerName, account, apiEndpoint, accountURL) {
-    // if (list.length === 0) return '';
+    if (list.length === 0) return '';
 
     const isOpen = list.length < 3 ? 'open' : '';
     const pluralType = type === 'reply' ? 'replies' : `${type}s`;
