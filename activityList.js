@@ -83,8 +83,8 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
         };
 
         try {
-            console.debug(`Account: ${followedAccountObj.account}, Display string: ${followedAccountObj.lastDisplayTime}, 
-                last display time: ${followedAccountObj.activityTime}`);
+            console.debug(`Account: ${followedAccountObj.account}, Display string: ${new Date (followedAccountObj.lastDisplayTime).toLocaleString()}, 
+                last display time: ${new Date (followedAccountObj.activityTime).toLocaleString()}`);
 
             // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
             // This means that some accounts with updates might not display until after the next polling cycle.
@@ -205,7 +205,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
 
     let content = `
         <details class="account-details" open>
-            <summary class="account-summary"><strong><a href="${webServerName}/@${account}" target="_blank">${account}</a></strong>: Activity after ${lastDisplayTime}</summary>
+            <summary class="account-summary"><strong><a href="${webServerName}/@${account}" target="_blank">${account}</a></strong>: Activity after ${new Date (lastDisplayTime).toLocaleString()}</summary>
             <div class="account-content">
         `;
 
