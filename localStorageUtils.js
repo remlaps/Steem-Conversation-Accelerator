@@ -151,3 +151,26 @@ async function releaseLock(scriptName) {
     console.log(`${scriptName} failed to release the lock (not owner or lock not found)`);
     return false;
 }
+
+async function maintainDuplicateTable(author, permlink) {
+    // Retrieve the current table from chrome storage
+    const currentTable = await chrome.storage.sync.get('duplicateTable');
+    const table = currentTable.duplicateTable || [];
+  
+    // Check if the current author/permlink is in it
+    const isDuplicate = table.some(item => item.author === author && item.permlink === permlink);
+  
+    // If not, add it
+    if (!isDuplicate) {
+      table.push({ author, permlink });
+    }
+  
+    // Save the table
+    await chrome.storage.sync.set({ duplicateTable: table });
+  
+    return !isDuplicate;
+  }
+  
+  async function deleteDuplicateTable() {
+    await chrome.storage.sync.remove('duplicateTable');
+  }

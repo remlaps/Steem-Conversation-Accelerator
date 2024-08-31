@@ -56,13 +56,23 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
 
             // console.debug(`id: ${id}, timestamp: ${timestamp}, ttstamp: ${transactionTimeStamp}, startTime: ${startTimeStamp}, Operation: ${op[0]}`);
             if (op[0] === "comment") {
-                const [, { parent_author, author }] = op;
-                if (!parent_author) {
-                    postList.push(activity);
-                } else if (author === account) {
-                    commentList.push(activity);
+                if ( ! op[1].body.startsWith("@@") ) {
+                    // Throw out edits.  They're more clutter than value.
+                    const [, { parent_author, author, permlink }] = op;
+                    const isUnique = maintainDuplicateTable (author, permlink );  // No need to display the same comment/reply twice.
+                    if (isUnique) {
+                        if (!parent_author) {
+                            postList.push(activity);
+                        } else if (author === account) {
+                            commentList.push(activity);
+                        } else {
+                            replyList.push(activity);
+                        }
+                    } else {
+                        console.debug(`steemHelpers:getAccountActivities - Throwing out duplicate for ${author}/${permlink}`);
+                    }
                 } else {
-                    replyList.push(activity);
+                    console.debug(`steemHelpers:getAccountActivities - Throwing out edit activity for ${op[1].body}`);
                 }
             }
 

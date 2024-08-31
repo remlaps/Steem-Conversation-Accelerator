@@ -1,8 +1,40 @@
 # Steem Conversation Accelerator
 
-The Steem Conversation Accelerator is a browser extension that enhances our experience on the Steem platform by sending notifications in the browser when activity of interest occurs on the Steem blockchain.  When the notification is clicked, it opens a browser tab with a list of the recently observed activities.
+## Overview
 
-If the browser goes idle and stays that way for 10 minutes, background polling will stop until it becomes active again.
+The Steem Conversation Accelerator is a browser extension that is intended to enhance our experience on the Steem platform by sending notifications in the browser when activities of interest occur on the Steem blockchain.  When the notification is clicked, a browser tab is launched with a list of the recently observed activities.
+
+If the browser goes idle and stays that way for 10 minutes, background polling will stop until the browser becomes active again.
+
+## Usage
+
+To use this browser extension, simply install it by following the instructions below.  A script will run in the background and a browser notification will be displayed when some tracked activity is observed.  The frequency of the background script and the name of the observer account are controlled by settings in the browser's popup window.  This window is opened at installation time and can also be opened later from the browser's extension menu.
+
+If you click on the browser notification, it will open a new tab in the browser with a list of the observed activities.
+
+The activity page will have a white background while it's loading and will change color to light blue when loading completes.  If the page is closed before it finishes loading, the same acitivities will be displayed again later (unless they age out).
+
+Please note that:
+1. There will be duplicates.  If the observer follows two accounts which comment on each other's posts, the comment from one account may also show up as a reply from the other account's perspective.  Some of these are filtered out, but others will appear as a consequence of staggered polling between accounts.
+2. There will be missed activities.  The intention here is to show recent activities, so if your browser is idle or closed for a period of time, older activities will be intentionally skipped.  Additionally, network/API disruptions can lead to missed activities.  Edits of posts, comments, and replies are also filtered out.
+
+Changing API and web server preferences can also be done in the popup window.  If you change your API or web server preferences, the update will be recognized after the current polling cycle finishes, so depending on the number of followed accounts, the speed of the network, and the polling interval, there may be a significant lag time.
+
+As of now, the API endpoints include the following:
+
+- https://api.moecki.online (@moecki on Steem)
+- https://api.steememory.com (@yasu on Steem)
+- https://api.steemit.com (@steemitblog on Steem)
+- https://api.steemitdev.com (@steemitblog on Steem)
+
+To add other API endpoints, the "follow" plugin must be active.
+
+Current web servers include:
+
+- https://steemit.com
+- https://steemitdev.com
+- https://steempro.com
+- https://upvu.org
 
 ## Monitored activities
 ### In progress / active
@@ -27,9 +59,9 @@ The code organization is a work in progress, but this is the intended purpose of
 
 ## Installation
 
-The extension has been developed with use of the [Brave](https://brave.com) browser, and might work with other browsers that support Manifest V3.
+The extension has been developed with use of the [Brave](https://brave.com) browser, and might also work with other browsers that support Manifest V3.
 
-The extension can be installed in Developer mode for the following browsers:
+The extension can be installed in Developer mode.  Here are AI-generated, untested installation instructions:
 
 ### Brave
 
@@ -59,11 +91,11 @@ The extension can be installed in Developer mode for the following browsers:
 6. Disable "Developer mode" by toggling the switch in the top right corner.
 
 ### Startup
-- After installing and starting the browser extension, you should receive a pop-up window asking for configuration information.  Set the observer account and change any other desired settings.
+- After installing and starting the browser extension, you should receive a popup window asking for configuration information.  Set the observer account and change any other desired settings.
 
 ## Contributing
 
-Thank you for your interest in contributing to the Steem Conversation Accelerator! This is a free and open-source project, and we welcome contributions from developers of all skill levels.
+Thank you for your interest in contributing to the Steem Conversation Accelerator! This is a free and open-source project, and contributions are welcome from developers of all skill levels.
 
 ### Getting Started
 
@@ -88,7 +120,7 @@ Thank you for your interest in contributing to the Steem Conversation Accelerato
 
 ### Issues and Bugs
 
-If you encounter any issues or bugs while contributing, please open a new issue on the GitHub repository. We will do our best to assist you and resolve the issue as soon as possible.
+If you encounter any issues or bugs while contributing, please open a new issue on the GitHub repository.
 
 ## References
 - (July 4, 2024): [Programming Diary #20: Accelerating organic activity](https://steemit.com/hive-151113/@remlaps/programming-diary-20-accelerating-organic)
@@ -99,11 +131,11 @@ If you encounter any issues or bugs while contributing, please open a new issue 
 
 ## Contact Information
 
-If you have any questions or need assistance with the Steem Conversation Accelerator, please feel free to reach out to me, @remlaps, on the Steem blockchain. You can find me by searching for my username on the Steem blockchain or by visiting my profile page.
+If you have any questions or need assistance with the Steem Conversation Accelerator, please feel free to reach out to me, @remlaps, on the Steem blockchain.
 
 ## Managing Expectations
 
-I believe this can be a useful tool for many participants in the Steem ecosystems, but be forewarned that it will have problems and fixes will be slow.  I am learning JavaScript, HTML, and CSS as I go here; and this is a hobby project that I can only develop in whatever spare time I can find during nights and weekends.
+I believe this can be a useful tool for many participants in the Steem ecosystems, but be forewarned that it will have problems and fixes will be slow.  I am learning JavaScript, HTML, and CSS as I go here; and this is a hobby project that I can only develop in whatever spare time I find during nights and weekends.
 
 Additionally, for the above reasons, I am sticking to a view-only perspective, and I don't expect to incorporate anything involving the use of blockchain keys any time soon.  If this extension ever asks for your keys, you should be suspicious.
 

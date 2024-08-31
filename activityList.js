@@ -50,6 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         console.log(`Could not get array lock in activityList.`);
     }
+    deleteDuplicateTable();
     // After all data is loaded and the page is populated, change the background color
     document.body.style.backgroundColor = getComputedStyle(document.documentElement)
         .getPropertyValue('--altBgColor').trim();

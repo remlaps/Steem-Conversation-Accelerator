@@ -224,7 +224,10 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     if ( newActivity ) {
                         newActivityFound = true;
                     } else {
-                        // accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
+                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 3600000 ) {
+                            // Ignore stale conversations (older than 1 hour)
+                            accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
+                        }
                     }
 
                     const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
@@ -639,7 +642,8 @@ async function getActivityTime(user, apiNode, startTime) {
                 const {timestamp, op} = transaction;
                 const [opType] = op;
 
-                if (opType === 'comment') {
+                // If the activity was a comment and it was not in edit/diff syntax, return the acitivy time.
+                if (opType === 'comment' && !op[1].body.startsWith("@@")) {
                     return new Date(`${timestamp}Z`);
                 }
 
