@@ -23,7 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
              */
             const previousAlertTimeField = document.getElementById("previous-alert-time");
             if (previousAlertTimeField) {
-                previousAlertTimeField.textContent = lastActivityPageViewTime;
+                previousAlertTimeField.textContent = new Date (lastActivityPageViewTime).toLocaleString();
             }
 
             let uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
@@ -83,8 +83,8 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
         };
 
         try {
-            console.debug(`Account: ${followedAccountObj.account}, Display string: ${new Date (followedAccountObj.lastDisplayTime).toLocaleString()}, 
-                last display time: ${new Date (followedAccountObj.activityTime).toLocaleString()}`);
+            console.debug(`Account: ${followedAccountObj.account}, Display string: ${new Date (followedAccountObj.lastDisplayTime + 'Z').toString()}, 
+                last display time: ${new Date (followedAccountObj.activityTime + 'Z').toLocaleString()}`);
 
             // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
             // This means that some accounts with updates might not display until after the next polling cycle.
@@ -139,7 +139,7 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
 
     let content = `<li class="post-box">`;
 
-    content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${timestamp}</a><br>`;
+    content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${new Date (timestamp + 'Z').toLocaleString()}</a><br>`;
     if (type === 'post') {
         content += `<strong>Post: <A HREF="${accountURL}/${permlink}" target="_blank">${title}</a></strong>`;
     } else {
@@ -157,7 +157,7 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     }
 
     content += '<br><br>';
-    content += `<strong>Body Snippet:</strong> ${bodySnippet}...`;
+    content += `${bodySnippet}...`;
     content += '<br>';
     content += `</li>`;
 
