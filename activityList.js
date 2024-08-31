@@ -50,7 +50,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         console.log(`Could not get array lock in activityList.`);
     }
-    deleteDuplicateTable();
+    await deleteDuplicateTable();
     // After all data is loaded and the page is populated, change the background color
     document.body.style.backgroundColor = getComputedStyle(document.documentElement)
         .getPropertyValue('--altBgColor').trim();
@@ -72,7 +72,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
     for (const followedAccountObj of uniqueAccountsWithNewActivity) {
         let lastActivity;
         console.log(`Processing account: ${followedAccountObj.account}`);
-        
+
         await updateLock("activityList");
         const listItem = document.createElement('li');
         const accountURL = `${webServerName}/@${followedAccountObj.account}`;
@@ -80,7 +80,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
             postList: [],
             commentList: [],
             replyList: []
-          };
+        };
 
         try {
             console.debug(`Account: ${followedAccountObj.account}, Display string: ${followedAccountObj.lastDisplayTime}, 
@@ -88,17 +88,17 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
 
             // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
             // This means that some accounts with updates might not display until after the next polling cycle.
-            if ( new Date (followedAccountObj.lastDisplayTime ) < new Date ( followedAccountObj.activityTime ) ) {
+            if (new Date(followedAccountObj.lastDisplayTime) < new Date(followedAccountObj.activityTime)) {
                 console.debug(`Going deeper for ${followedAccountObj.account}`);
                 activities = await getAccountActivities(followedAccountObj.account, followedAccountObj.lastDisplayTime, apiEndpoint);
                 const content = await processAllItems(...Object.values(activities), followedAccountObj.account, apiEndpoint, webServerName,
                     accountURL, followedAccountObj.lastDisplayTime);
                 listItem.innerHTML = content;
             }
-            if ( isEmptyActivityList(activities) ) {
-                lastActivity = new Date ( `${followedAccountObj.activityTime}` );
+            if (isEmptyActivityList(activities)) {
+                lastActivity = new Date(`${followedAccountObj.activityTime}`);
             } else {
-                lastActivity = getLastActivityTimeFromAll (activities);
+                lastActivity = getLastActivityTimeFromAll(activities);
             }
         } catch (error) {
             console.warn(`Error fetching activities for account ${followedAccountObj.account}:`, error);
@@ -129,9 +129,14 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
         return `<li class="post-box">Error: Invalid ${type} data</li>`;
     }
 
+    isUnique = maintainDuplicateTable(author, permlink);
+    if (!isUnique) {
+        return "";
+    }
+
     const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
     const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
-    
+
     let content = `<li class="post-box">`;
 
     content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${timestamp}</a><br>`;
@@ -222,7 +227,7 @@ async function generateContentSection(list, type, webServerName, account, apiEnd
 
     const isOpen = list.length < 3 ? 'open' : '';
     const pluralType = type === 'reply' ? 'replies' : `${type}s`;
-    
+
     return `
         <details class="content-details ${pluralType}-details" ${isOpen}>
             <summary class="content-summary"><a href="${webServerName}/@${account}/${pluralType}" target="_blank">${pluralType.charAt(0).toUpperCase() + pluralType.slice(1)} (${list.length}</a>)</summary>
