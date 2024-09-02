@@ -151,7 +151,7 @@ async function fastActivityCheckWithRetry(followedAccount, apiNode, retries = 3)
     }
 }
 
-async function fastActivityCheck(user, apiNode) {
+async function getSteemAccountInfo(user, apiNode) {
     try {
         response = await fetch(apiNode, {
             keepalive: true,
@@ -189,8 +189,7 @@ async function fastActivityCheck(user, apiNode) {
             return null; // No accounts found
         }
 
-        const lastPostTime = data.result.accounts[0].last_post;
-        return lastPostTime; // Return last post time
+        return data;
     } catch (error) {
         console.warn(`Error fetching last post time for ${user}:`, error);
         return null; // Return null on exception

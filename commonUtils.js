@@ -94,17 +94,37 @@ function newerDate(date1, date2) {
  * Remove duplicates using a Set and convert back to an Array
  */
 function filterUniqueAccounts(accountsWithNewActivity) {
-    const parsedAccounts = JSON.parse(accountsWithNewActivity);
+    let result = [];
     
-    const uniqueAccounts = parsedAccounts.reduce((acc, item) => {
-        if (!acc[item.account]) {
-            acc[item.account] = item;
-        } else {
-            acc[item.account].activityTime = newerDate(acc[item.account].activityTime, item.activityTime);
-            acc[item.account].lastDisplayTime = newerDate(acc[item.account].lastDisplayTime, item.lastDisplayTime);
-        }
-        return acc;
-    }, {});
+    try {
+        const parsedAccounts = JSON.parse(accountsWithNewActivity);
+        const uniqueAccounts = {};
 
-    return Object.values(uniqueAccounts);
+        for (const item of parsedAccounts) {
+            if (!uniqueAccounts[item.account]) {
+                uniqueAccounts[item.account] = item;
+            } else {
+                uniqueAccounts[item.account].activityTime = newerDate(uniqueAccounts[item.account].activityTime, item.activityTime);
+                uniqueAccounts[item.account].lastDisplayTime = newerDate(uniqueAccounts[item.account].lastDisplayTime, item.lastDisplayTime);
+            }
+        }
+
+        result = Object.values(uniqueAccounts);
+    } catch (error) {
+        console.error("Error in filterUniqueAccounts:", error);
+    }
+
+    return result;
+}
+
+async function getSteemAccountName(user, apiNode) {
+    let accountName = null;
+    const accountInfo = await getSteemAccountInfo(user, apiNode);
+    
+    if (accountInfo?.result?.accounts[0]) {
+        accountName = accountInfo.result.accounts[0].name;
+    } else {
+        console.warn(`No account information found for ${user}`);
+    }
+    return accountName;
 }

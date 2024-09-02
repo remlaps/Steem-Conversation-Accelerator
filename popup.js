@@ -6,13 +6,25 @@ document.getElementById('saveButton').addEventListener('click', () => {
     const apiServerName = document.getElementById('apiServerName').value;
     const webServerName = document.getElementById('webServerName').value;
 
-    chrome.storage.local.set({
-        pollingTime: parseInt(pollingTime, 10),
-        steemObserverName: steemObserverName,
-        apiServerName: apiServerName,
-        webServerName: webServerName
-    }, () => {
-        alert('Settings saved');
+    console.debug(`In document: steemObserverName - ${steemObserverName}`);
+    getSteemAccountName(steemObserverName, apiServerName)
+    .then(accountName => {
+        console.debug(`Steem Observer Account: ${accountName}`);
+        if (accountName === steemObserverName ) {
+            chrome.storage.local.set({
+                pollingTime: parseInt(pollingTime, 10),
+                steemObserverName: accountName,
+                apiServerName: apiServerName,
+                webServerName: webServerName
+            }, () => {
+                alert('Settings saved');
+            });
+        } else {
+            alert(`Steem observer account ${steemObserverName} could not be verified.  Found ${accountName}`);
+        }
+    })
+    .catch(error => {
+        console.error("An error occurred:", error);
     });
 });
 
