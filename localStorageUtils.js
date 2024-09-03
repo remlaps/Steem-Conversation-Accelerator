@@ -153,24 +153,24 @@ async function releaseLock(scriptName) {
 }
 
 async function maintainDuplicateTable(author, permlink) {
-  // Retrieve the current table from chrome storage
-  const currentTable = await chrome.storage.sync.get('duplicateTable');
-  const table = currentTable.duplicateTable || [];
+    // Retrieve the current table from chrome storage
+    const currentTable = await chrome.storage.local.get('duplicateTable');
+    const table = currentTable.duplicateTable || [];
 
-  // Check if the current author/permlink is in it
-  const isDuplicate = table.some(item => item.author === author && item.permlink === permlink);
+    // Check if the current author/permlink is in the table
+    const isRepeated = table.some(item => item.author === author && item.permlink === permlink);
 
-  // If not, add it
-  if (!isDuplicate) {
-    table.push({ author, permlink });
-  }
+    // If not, add it
+    if (!isRepeated) {
+        table.push({ author, permlink });
+    }
 
-  // Save the table
-  await chrome.storage.sync.set({ duplicateTable: table });
+    // Save the table
+    await chrome.storage.local.set({ duplicateTable: table });
 
-  return !isDuplicate;
+    return !isRepeated;
 }
 
 async function deleteDuplicateTable() {
-  await chrome.storage.sync.remove('duplicateTable');
+    await chrome.storage.local.remove('duplicateTable');
 }
