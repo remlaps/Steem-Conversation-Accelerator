@@ -83,13 +83,12 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
         };
 
         try {
-            console.debug(`Account: ${followedAccountObj.account}, Display string: ${new Date (followedAccountObj.lastDisplayTime + 'Z').toString()}, 
-                last display time: ${new Date (followedAccountObj.activityTime + 'Z').toLocaleString()}`);
+            // console.debug(`Account: ${followedAccountObj.account}, Display string: ${new Date (followedAccountObj.lastDisplayTime).toString()}, 
+                // last display time: ${new Date (followedAccountObj.activityTime).toLocaleString()}`);
 
             // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
             // This means that some accounts with updates might not display until after the next polling cycle.
             if (new Date(followedAccountObj.lastDisplayTime) < new Date(followedAccountObj.activityTime)) {
-                console.debug(`Going deeper for ${followedAccountObj.account}`);
                 activities = await getAccountActivities(followedAccountObj.account, followedAccountObj.lastDisplayTime, apiEndpoint);
                 const content = await processAllItems(...Object.values(activities), followedAccountObj.account, apiEndpoint, webServerName,
                     accountURL, followedAccountObj.lastDisplayTime);
@@ -112,7 +111,8 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
     return uniqueAccountsWithNewActivity;
 }
 
-function createContentItem(item, type, webServerName, accountURL, rootInfo) {
+async function createContentItem(item, type, webServerName, accountURL, rootInfo) {
+    // No need to check duplicates here.  They were filtered out earlier.
     let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
 
     if (item && item[1] && item[1].op && Array.isArray(item[1].op) && item[1].op.length > 1 && item[1].op[1]) {
@@ -129,27 +129,24 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
         return `<li class="post-box">Error: Invalid ${type} data</li>`;
     }
 
-    isUnique = maintainDuplicateTable(author, permlink);
-    if (!isUnique) {
-        return "";
-    }
-
     const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
     const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
 
     let content = `<li class="post-box">`;
 
-    content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${new Date (timestamp + 'Z').toLocaleString()}</a><br>`;
+    content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${new Date(timestamp + 'Z').toLocaleString()}</a><br>`;
+
     if (type === 'post') {
-        content += `<strong>Post: <A HREF="${accountURL}/${permlink}" target="_blank">${title}</a></strong>`;
+        content += `<strong>Post: <A HREF="${webServerName}/${permlink}" target="_blank">${title}</a></strong>`;
     } else {
         // For comments and replies
 
-        root_author = rootInfo.root_author;
-        root_permlink = rootInfo.root_permlink;
-        root_title = rootInfo.root_title;
+        const root_author = rootInfo.root_author;
+        const root_permlink = rootInfo.root_permlink;
+        const root_title = rootInfo.root_title;
 
         content += `<strong>Thread: </strong><a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
+
         if (parent_author !== root_author || parent_permlink !== root_permlink) {
             // This is a nested reply
             content += `<strong>Reply to:</strong> <a href="${webServerName}/@${parent_author}/${parent_permlink}" target="_blank">/@${parent_author}/${parent_permlink}</a><br>`;
@@ -161,22 +158,16 @@ function createContentItem(item, type, webServerName, accountURL, rootInfo) {
     content += '<br>';
     content += `</li>`;
 
-    // console.log(`Returning from createContentItem: ${content}`);
-    // console.dir(content);
+    console.dir(content);
     return content;
 }
 
 async function processItems(items, type, apiEndpoint, webServerName, accountURL) {
-    console.debug(`Entered processItems: ${type}`);
     let content;
     content = `<div class="indented-content">`;
     let rootInfo;
 
     for (const item of items) {
-        // console.debug(`Item: ${item}`);
-        // console.log("In processItems for loop.");
-        console.debug(`timestamp: ${item[1].timestamp}, author: ${item[1].op[1].author}, permlink: ${item[1].op[1].permlink}, api: ${apiEndpoint}`);
-        // console.dir(item);
         if (type !== 'post') {
             rootInfo = await getRootInfo(item[1].op[1].author, item[1].op[1].permlink, apiEndpoint);
             if (rootInfo) {
@@ -189,12 +180,11 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL)
                 console.debug("Failed to retrieve rootInfo");
             }
         }
-        content += createContentItem(item, type, webServerName, accountURL, rootInfo);
+        content += await createContentItem(item, type, webServerName, accountURL, rootInfo);
     }
 
     content += `</ul></div>`;
     // console.debug(`Exiting processItems, type: ${type}, content: ${content}`);
-    console.debug(`Exiting processItems, type: ${type}`);
     return content;
 }
 
@@ -218,7 +208,6 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
         </details>
         `;
 
-    // console.debug(`Exiting processAllItems: ${content}`);
     return content;
 }
 

@@ -153,34 +153,24 @@ async function releaseLock(scriptName) {
 }
 
 async function maintainDuplicateTable(author, permlink) {
-    try {
-      // Retrieve the current table from chrome local storage
-      const currentTable = await chrome.storage.local.get('duplicateTable');
-      const table = currentTable.duplicateTable || [];
-  
-      // Check if the current author/permlink is in it
-      const isDuplicate = table.some(item => item.author === author && item.permlink === permlink);
-  
-      // If not, add it
-      if (!isDuplicate) {
-        table.push({ author, permlink });
-  
-        // Save the table
-        await chrome.storage.local.set({ duplicateTable: table });
-      }
-  
-      return !isDuplicate;
-    } catch (error) {
-      console.error('Error in maintainDuplicateTable:', error);
-      throw error;
-    }
-  }
+    // Retrieve the current table from chrome storage
+    const currentTable = await chrome.storage.local.get('duplicateTable');
+    const table = currentTable.duplicateTable || [];
 
-  async function deleteDuplicateTable() {
-    try {
-      await chrome.storage.local.remove('duplicateTable');
-    } catch (error) {
-      console.error('Error deleting duplicateTable:', error);
-      throw error;
+    // Check if the current author/permlink is in the table
+    const isRepeated = table.some(item => item.author === author && item.permlink === permlink);
+
+    // If not, add it
+    if (!isRepeated) {
+        table.push({ author, permlink });
     }
-  }
+
+    // Save the table
+    await chrome.storage.local.set({ duplicateTable: table });
+
+    return !isRepeated;
+}
+
+async function deleteDuplicateTable() {
+    await chrome.storage.local.remove('duplicateTable');
+}
