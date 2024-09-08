@@ -186,3 +186,94 @@
 .posts-details { border-color: #ffcccc; }
 .comments-details { border-color: #ccffcc; }
 .replies-details { border-color: #ccccff; }
+
+/* Pop-up window styles */
+.popup-settings-body {
+    font-family: Arial, sans-serif;
+    width: 350px;
+    height: 300px;
+    padding: 15px;
+    position: relative;
+    background-color: #f0f8ff;
+    color: #333;
+    border: 2px solid #1e90ff;
+}
+
+.popup-settings-title {
+    margin-top: 0;
+    margin-bottom: 20px;
+    margin-left: 5px;
+    color: #1e90ff;
+}
+
+.popup-settings-top-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 10px;
+    margin-left: 5px;
+}
+
+.popup-settings-left-column {
+    flex: 1;
+}
+
+.popup-settings-label {
+    display: block;
+    margin-top: 5px;
+    margin-left: 5px;
+    color: #4169e1;
+}
+
+.popup-settings-select,
+.popup-settings-input {
+    width: 40%;
+    padding: 8px;
+    margin-top: 5px;
+    margin-left: 5px;
+    border: 1px solid #87cefa;
+    border-radius: 4px;
+    background-color: #fff;
+}
+
+.popup-settings-short-input {
+    width: 40%;
+}
+
+.popup-settings-save-button {
+    margin-top: 5px;
+    margin-left: 105px;
+    padding: 5px;
+    background-color: #1e90ff;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.3s;
+    text-align: right;
+}
+
+.popup-settings-save-button:hover {
+    background-color: #4169e1;
+}
+
+.popup-settings-lock-status {
+    margin-top: 5px;
+    font-size: 0.8em;
+    text-align: right;
+    background-color: #e6f3ff;
+    padding: 16px;
+    border-radius: 8px;
+    border: 1px solid #87cefa;
+    width: 150px;
+}
+
+.popup-settings-lock-status p {
+    margin: 0;
+    color: #4169e1;
+}
+
+.popup-settings-lock-status span {
+    font-weight: bold;
+    color: #1e90ff;
+}
