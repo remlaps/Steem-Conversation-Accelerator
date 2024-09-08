@@ -140,6 +140,25 @@ async function updateLock(scriptName) {
     return false;
 }
 
+async function checkLock() {
+    const result = await chrome.storage.local.get('processingLock');
+
+    if (result.processingLock) {
+        return {
+            owner: result.processingLock.scriptName,
+            lockedAt: result.processingLock.timestamp,
+        };
+    }
+
+    return null;
+}
+
+function checkLockSync() {
+    return new Promise((resolve, reject) => {
+        checkLock().then(result => resolve(result)).catch(error => reject(error));
+    });
+}
+
 async function releaseLock(scriptName) {
     console.log(`${scriptName} is attempting to release the lock`);
     const result = await chrome.storage.local.get('processingLock');

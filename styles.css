@@ -227,10 +227,10 @@
 
 .popup-settings-select,
 .popup-settings-input {
-    width: 40%;
+    width: 45%;
     padding: 8px;
     margin-top: 5px;
-    margin-left: 5px;
+    margin-left: 0px;
     border: 1px solid #87cefa;
     border-radius: 4px;
     background-color: #fff;
@@ -242,7 +242,7 @@
 
 .popup-settings-save-button {
     margin-top: 5px;
-    margin-left: 105px;
+    margin-left: 90px;
     padding: 5px;
     background-color: #1e90ff;
     color: white;
@@ -265,7 +265,7 @@
     padding: 16px;
     border-radius: 8px;
     border: 1px solid #87cefa;
-    width: 150px;
+    width: 170px;
 }
 
 .popup-settings-lock-status p {

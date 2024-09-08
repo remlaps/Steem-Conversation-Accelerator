@@ -713,17 +713,4 @@ function setupAlarms() {
     });
 }
 
-function showAlarms() {
-    // Get all scheduled alarms
-    chrome.alarms.getAll(alarms => {
-        if (alarms.length === 0) {
-            console.log('No alarms currently scheduled.');
-        } else {
-            // console.log('Currently scheduled alarms:');
-            alarms.forEach(alarm => {
-                const gmtTime = new Date(alarm.scheduledTime).toISOString();
-                console.log(`- Alarm "${alarm.name}" at ${new Date(alarm.scheduledTime)}`);
-            });
-        }
-    });
-}
+

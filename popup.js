@@ -30,6 +30,36 @@ document.getElementById('saveButton').addEventListener('click', () => {
 
 // Load saved settings
 window.onload = () => {
+
+
+    async function displayActivityInfo() {
+        const [lockInfo] = await Promise.all([checkLockSync()]);
+        if (lockInfo) {
+            lockOwner = lockInfo.owner;
+            lockTime = lockInfo.lockedAt;
+
+            // Set HTML elements
+            document.getElementById('lockStatusText').textContent = `${lockOwner}`;
+            document.getElementById('lockStatusTime').textContent = new Date(lockTime).toLocaleString();
+        } else {
+            // Handle the case where there's no lock
+            document.getElementById('lockStatusText').textContent = 'Paused';
+            document.getElementById('lockStatusTime').textContent = '-';
+        }
+        document.getElementById('nextPollTime').textContent = await getNextPollingTime();
+        console.log(`Next alarm time: ${await getNextPollingTime()}`);
+    }
+
+    displayActivityInfo();
+
+    // Repeat every 15 seconds
+    let intervalId = setInterval(displayActivityInfo, 15000);
+
+    // Clear the interval when the window is closed
+    window.addEventListener('beforeunload', () => {
+        clearInterval(intervalId);
+    });
+
     chrome.storage.local.get(['pollingTime', 'steemObserverName', 'apiServerName', 'webServerName'], (result) => {
         if (result.pollingTime) {
             document.getElementById('pollingTime').value = result.pollingTime;
