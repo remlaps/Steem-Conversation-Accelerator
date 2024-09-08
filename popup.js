@@ -33,7 +33,7 @@ window.onload = () => {
 
 
     async function displayActivityInfo() {
-        const [lockInfo] = await Promise.all([checkLockSync()]);
+        const [lockInfo, nextPollTime] = await Promise.all([checkLockSync(), getNextPollingTime()]);
         if (lockInfo) {
             lockOwner = lockInfo.owner;
             lockTime = lockInfo.lockedAt;
@@ -46,8 +46,8 @@ window.onload = () => {
             document.getElementById('lockStatusText').textContent = 'Paused';
             document.getElementById('lockStatusTime').textContent = '-';
         }
-        document.getElementById('nextPollTime').textContent = await getNextPollingTime();
-        console.log(`Next alarm time: ${await getNextPollingTime()}`);
+        document.getElementById('nextPollTime').textContent = nextPollTime ? nextPollTime.toLocaleString() : '-';
+        console.log(`Next alarm time: ${nextPollTime}`);
     }
 
     displayActivityInfo();

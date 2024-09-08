@@ -159,8 +159,7 @@ async function getNextPollingTime() {
           return;
         }
   
-        const now = new Date();
-        const nextAlarmTime = new Date(now.getTime() + checkSteemActivityAlarm.periodInMinutes * 60 * 1000).toLocaleTimeString();
+        const nextAlarmTime = new Date(checkSteemActivityAlarm.scheduledTime);
   
         resolve(nextAlarmTime);
       });
