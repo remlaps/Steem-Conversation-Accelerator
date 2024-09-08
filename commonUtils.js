@@ -128,3 +128,40 @@ async function getSteemAccountName(user, apiNode) {
     }
     return accountName;
 }
+
+function showAlarms() {
+    // Get all scheduled alarms
+    chrome.alarms.getAll(alarms => {
+        if (alarms.length === 0) {
+            console.log('No alarms currently scheduled.');
+        } else {
+            // console.log('Currently scheduled alarms:');
+            alarms.forEach(alarm => {
+                // const gmtTime = new Date(alarm.scheduledTime).toISOString();
+                console.log(`- Alarm "${alarm.name}" at ${new Date(alarm.scheduledTime)}`);
+            });
+        }
+    });
+}
+
+async function getNextPollingTime() {
+    return new Promise((resolve, reject) => {
+      chrome.alarms.getAll((alarms) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+  
+        const checkSteemActivityAlarm = alarms.find(alarm => alarm.name === 'checkSteemActivity');
+  
+        if (!checkSteemActivityAlarm) {
+          resolve(null); // No alarm found
+          return;
+        }
+  
+        const nextAlarmTime = new Date(checkSteemActivityAlarm.scheduledTime);
+  
+        resolve(nextAlarmTime);
+      });
+    });
+  }

@@ -2,61 +2,51 @@
 <html>
 <head>
     <title>Extension Settings</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            width: 300px;
-            padding: 10px;
-        }
-        label {
-            display: block;
-            margin-top: 10px;
-        }
-        select, input {
-            width: 100%;
-            padding: 5px;
-            margin-top: 5px;
-        }
-        .short-input {
-            width: 120px; /* Adjust the width as needed */
-        }
-        #saveButton {
-            margin-top: 10px; /* Add padding/margin top to the button */
-            padding: 10px; /* Optional: Add padding inside the button */
-        }
-    </style>
+    <link rel="stylesheet" type="text/css" href="styles.css">
 </head>
-<body>
-    <h2>Extension Settings</h2>
-    <label for="pollingTime">Polling Time (minutes)</label>
-    <select id="pollingTime" class="short-input">
-        <option value="1">1</option>
-        <option value="5">5</option>
-        <option value="10" selected>10</option>
-        <option value="30">30</option>
-        <option value="60">60</option>
-    </select>
+<body class="popup-settings-body">
+    <h2 class="popup-settings-title">Extension Settings</h2>
+    
+    <div class="popup-settings-top-row">
+        <div class="popup-settings-left-column">
+            <label for="pollingTime" class="popup-settings-label">Polling Time (minutes)</label>
+            <select id="pollingTime" class="popup-settings-select popup-settings-short-input">
+                <option value="1">1</option>
+                <option value="5">5</option>
+                <option value="10" selected>10</option>
+                <option value="30">30</option>
+                <option value="60">60</option>
+            </select>
+        </div>
+        <div id="lockStatus" class="popup-settings-lock-status">
+            <p>Activity Status: <span id="lockStatusText">Initializing...</span></p>
+            <p>Last Update: <span id="lockStatusTime"></span></p>
+            <p>Next Poll: <span id="nextPollTime"></span></p>
+        </div>
+    </div>
 
-    <label for="steemObserverName">Steem Account Name</label>
-    <input type="text" id="steemObserverName" placeholder="Enter the Steem observer account name" maxlength="16" class="short-input">
+    <label for="steemObserverName" class="popup-settings-label">Steem Observer Account</label>
+    <input type="text" id="steemObserverName" placeholder="Enter the Steem observer account name" maxlength="16" class="popup-settings-input popup-settings-short-input">
 
-    <label for="apiServerName">API Endpoint</label>
-    <select id="apiServerName">
+    <label for="apiServerName" class="popup-settings-label">API Endpoint</label>
+    <select id="apiServerName" class="popup-settings-select">
         <option value="https://api.moecki.online" selected>api.moecki.online</option>
         <option value="https://api.steememory.com">api.steememory.com</option>
         <option value="https://api.steemit.com">api.steemit.com</option>
         <option value="https://api.steemitdev.com">api.steemitdev.com</option>
     </select>
 
-    <label for="webServerName">Web Server</label>
-    <select id="webServerName">
+    <label for="webServerName" class="popup-settings-label">Web Server</label>
+    <select id="webServerName" class="popup-settings-select">
         <option value="https://steemit.com" selected>Steemit Prod</option>
         <option value="https://steemitdev.com">Steemit Dev</option>
         <option value="https://steempro.com">SteemPro</option>
         <option value="https://upvu.org">Upvu</option>
     </select>
 
-    <button id="saveButton">Save Settings</button>
+    <!-- <div class="popup-settings-column"> -->
+        <button id="saveButton" class="popup-settings-save-button">Save Settings</button>
+    <!-- </div> -->
 
     <script src="popup.js"></script>
     <script src="commonUtils.js"></script>
