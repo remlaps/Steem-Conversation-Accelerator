@@ -17,10 +17,11 @@ document.getElementById('saveButton').addEventListener('click', () => {
                 apiServerName: apiServerName,
                 webServerName: webServerName
             }, () => {
-                alert('Settings saved');
+                console.log("Settings saved");
+                showCustomAlert('Settings saved');
             });
         } else {
-            alert(`Steem observer account ${steemObserverName} could not be verified.  Found ${accountName}`);
+            showCustomAlert(`Steem observer account ${steemObserverName} could not be verified.`);
         }
     })
     .catch(error => {
@@ -30,8 +31,12 @@ document.getElementById('saveButton').addEventListener('click', () => {
 
 // Load saved settings
 window.onload = () => {
+    resizeWindow();
+    // Get the custom alert OK button
+    const customAlertOkButton = document.getElementById('customAlertOkButton');
 
-
+    // Add click event listener to the custom alert OK button
+    customAlertOkButton.addEventListener('click', closeCustomAlert);
     async function displayActivityInfo() {
         const [lockInfo, nextPollTime] = await Promise.all([checkLockSync(), getNextPollingTime()]);
         if (lockInfo) {
@@ -75,3 +80,46 @@ window.onload = () => {
         }
     });
 };
+
+function resizeWindow() {
+    // Get the element with the class 'popup-settings-body'
+    const popupBody = document.querySelector('.popup-settings-body');
+
+    if (!popupBody) {
+        console.error('Element with class .popup-settings-body not found');
+        return;
+    }
+
+    // Get the computed style of the popup body
+    const popupStyle = window.getComputedStyle(popupBody);
+
+    // Read the width and height
+    let width = parseInt(popupStyle.width);
+    let height = parseInt(popupStyle.height);
+
+    // Add padding (left + right for width, top + bottom for height)
+    width += parseInt(popupStyle.paddingLeft) + parseInt(popupStyle.paddingRight);
+    height += parseInt(popupStyle.paddingTop) + parseInt(popupStyle.paddingBottom);
+
+    // Add border (left + right for width, top + bottom for height)
+    width += parseInt(popupStyle.borderLeftWidth) + parseInt(popupStyle.borderRightWidth);
+    height += parseInt(popupStyle.borderTopWidth) + parseInt(popupStyle.borderBottomWidth);
+
+    // Add a small buffer for any potential scrollbars or browser-specific elements
+    const xbuffer = 17;
+    const ybuffer = 39;
+    width += xbuffer;
+    height += ybuffer;
+
+    // Resize the window
+    window.resizeTo(width, height);
+}
+
+function showCustomAlert(message) {
+    document.getElementById('alertMessage').textContent = message;
+    document.getElementById('customAlert').style.display = 'block';
+}
+
+function closeCustomAlert() {
+    document.getElementById('customAlert').style.display = 'none';
+}
