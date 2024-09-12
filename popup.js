@@ -31,12 +31,17 @@ document.getElementById('saveButton').addEventListener('click', () => {
 
 // Load saved settings
 window.onload = () => {
+    // Make the window fit the HTML body.
     resizeWindow();
+
+    /*
+     * custom alert button that's small enough to fit in the popup window.
+     */
     // Get the custom alert OK button
     const customAlertOkButton = document.getElementById('customAlertOkButton');
-
     // Add click event listener to the custom alert OK button
     customAlertOkButton.addEventListener('click', closeCustomAlert);
+
     async function displayActivityInfo() {
         const [lockInfo, nextPollTime] = await Promise.all([checkLockSync(), getNextPollingTime()]);
         if (lockInfo) {
