@@ -137,7 +137,7 @@ async function createContentItem(item, type, webServerName, accountURL, rootInfo
     content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${new Date(timestamp + 'Z').toLocaleString()}</a><br>`;
 
     if (type === 'post') {
-        content += `<strong>Post: <A HREF="${webServerName}/${permlink}" target="_blank">${title}</a></strong>`;
+        content += `<strong>Post: <A HREF="${webServerName}/@${author}/${permlink}" target="_blank">${title}</a></strong>`;
     } else {
         // For comments and replies
 
