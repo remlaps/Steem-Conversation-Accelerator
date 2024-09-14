@@ -111,7 +111,7 @@ function filterUniqueAccounts(accountsWithNewActivity) {
 
         result = Object.values(uniqueAccounts);
     } catch (error) {
-        console.error("Error in filterUniqueAccounts:", error);
+        console.warn("Error in filterUniqueAccounts:", error);
     }
 
     return result;
@@ -165,3 +165,21 @@ async function getNextPollingTime() {
       });
     });
   }
+
+  async function clearAllNotifications()
+{
+    // Clear all notifications created by this extension
+    await chrome.notifications.getAll(function (notifications) {
+        for (let notificationId in notifications) {
+            if (notifications.hasOwnProperty(notificationId)) {
+                chrome.notifications.clear(notificationId, function (wasCleared) {
+                    if (wasCleared) {
+                        console.log(`Notification ${notificationId} cleared.`);
+                    } else {
+                        console.log(`Notification ${notificationId} could not be cleared.`);
+                    }
+                });
+            }
+        }
+    });
+}

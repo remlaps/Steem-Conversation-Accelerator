@@ -200,6 +200,9 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                         lastCheckedIndex: 0,
                     });
                     newActivityFound = false;
+                    await clearAllNotifications();
+                    clearAlarms();
+                    setupAlarms();
                     break;
                 }
                 const followedAccount = followingList[i];
@@ -438,20 +441,7 @@ function updateExistingAccountActivity(existingAccountIndex, lastAccountActivity
 async function displayBrowserNotification(message) {
     console.log("account list: ", accountsWithNewActivity, " in displayBrowserNotification.");
 
-    // Clear all notifications created by this extension
-    await chrome.notifications.getAll(function (notifications) {
-        for (let notificationId in notifications) {
-            if (notifications.hasOwnProperty(notificationId)) {
-                chrome.notifications.clear(notificationId, function (wasCleared) {
-                    if (wasCleared) {
-                        console.log(`Notification ${notificationId} cleared.`);
-                    } else {
-                        console.log(`Notification ${notificationId} could not be cleared.`);
-                    }
-                });
-            }
-        }
-    });
+    await clearAllNotifications();
 
     // Create a new notification
     await chrome.notifications.create({

@@ -3,6 +3,7 @@
 document.addEventListener('DOMContentLoaded', async () => {
     const thisActivityPageViewTime = new Date().toISOString();
     if (await acquireLock('activityList', 2)) { // Higher priority
+        await clearAllNotifications();
         try {
             console.log(`array lock set in event listener.`);
             let { accountsWithNewActivity, steemObserverName, lastActivityPageViewTime } =
