@@ -91,8 +91,8 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
             // This means that some accounts with updates might not display until after the next polling cycle.
             if (new Date(followedAccountObj.lastDisplayTime) < new Date(followedAccountObj.activityTime)) {
                 activities = await getAccountActivities(followedAccountObj.account, followedAccountObj.lastDisplayTime, apiEndpoint);
-                const content = await processAllItems(...Object.values(activities), followedAccountObj.account, apiEndpoint, webServerName,
-                    accountURL, followedAccountObj.lastDisplayTime);
+                const content = await processAllItems(...Object.values(activities), followedAccountObj.account, apiEndpoint,
+                 webServerName, accountURL, followedAccountObj.lastDisplayTime, steemObserverName );
                 listItem.innerHTML = content;
             }
             if (isEmptyActivityList(activities)) {
@@ -189,19 +189,22 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL)
     return content;
 }
 
-async function processAllItems(postList, commentList, replyList, account, apiEndpoint, webServerName, accountURL, lastDisplayTime) {
+async function processAllItems(postList, commentList, replyList, account, apiEndpoint, 
+    webServerName, accountURL, lastDisplayTime, steemObserverName) {
     if (postList.length === 0 && commentList.length === 0 && replyList.length === 0) {
         return "";
     }
 
     let content = `
         <details class="account-details" open>
-            <summary class="account-summary"><strong><a href="${webServerName}/@${account}" target="_blank">${account}</a></strong>: Activity after ${new Date (lastDisplayTime).toLocaleString()}</summary>
+            <summary class="account-summary"><strong><a href="${webServerName}/@${account}" target="_blank">${account}</a></strong>: Activity after ${new Date(lastDisplayTime).toLocaleString()}</summary>
             <div class="account-content">
         `;
 
-    content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, accountURL);
-    content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, accountURL);
+    if (account !== steemObserverName) {
+        content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, accountURL);
+        content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, accountURL);
+    }
     content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, accountURL);
 
     content += `

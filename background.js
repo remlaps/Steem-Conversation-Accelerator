@@ -184,7 +184,8 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
             // Get the observer account and collect its followed accounts.
             steemObserverName = await getStoredUser();
             apiNode = await getApiServerName();
-            const followingList = await getFollowingListWithRetry(steemObserverName, apiNode);
+            let followingList = await getFollowingListWithRetry(steemObserverName, apiNode);
+            followingList = followingList.concat (steemObserverName);
 
             // Delete unfollowed accounts or not-followed accounts after switching observer accounts in the pop-up window.
             accountsWithNewActivity = await deleteNoFollows(followingList, accountsWithNewActivity);
