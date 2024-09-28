@@ -17,8 +17,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 steemObserverNameField.textContent = steemObserverName;
             }
 
-            // console.log(`Processing activity for ${steemObserverName} after: ${thisActivityPageViewTime}`);
-
+            let allIgnores = [];
+            await getAllIgnoredAccounts(steemObserverName)
+                .then(ignoredAccounts => {
+                    allIgnores = ignoredAccounts;
+                })
+                .catch(error => console.error('Error:', error));
+                
             /*
              * Display the last displayed time.
              */
@@ -28,7 +33,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             let uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
-            uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity);
+            uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName);
+            const updatedAccountsWithNewActivity = removeIgnoredAccounts(uniqueAccountsWithNewActivity, allIgnores);
+            uniqueAccountsWithNewActivity = updatedAccountsWithNewActivity;
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
@@ -52,8 +59,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         console.log(`Could not get array lock in activityList.`);
     }
     await deleteDuplicateTable();
-    // After all data is loaded and the page is populated, change the background color
-    document.body.style.backgroundColor = getComputedStyle(document.documentElement)
+     // After all data is loaded and the page is populated, change the background color
+     document.body.style.backgroundColor = getComputedStyle(document.documentElement)
         .getPropertyValue('--altBgColor').trim();
 
 }); // End of document.addEventListener()
@@ -61,7 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 /*
  * Create the HTML for the posts, replies, and comments.
  */
-async function updateAccountsList(uniqueAccountsWithNewActivity) {
+async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName) {
     if (uniqueAccountsWithNewActivity.length === 0) {
         accountsList.innerHTML = '<li>No new activity detected.</li>';
         return;
@@ -83,25 +90,27 @@ async function updateAccountsList(uniqueAccountsWithNewActivity) {
             replyList: []
         };
 
+        const ldt = followedAccountObj.lastDisplayTime;
+        const followedAcct = followedAccountObj.account;
+        const actTime = followedAccountObj.activityTime;
         try {
-            // console.debug(`Account: ${followedAccountObj.account}, Display string: ${new Date (followedAccountObj.lastDisplayTime).toString()}, 
-                // last display time: ${new Date (followedAccountObj.activityTime).toLocaleString()}`);
-
             // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
             // This means that some accounts with updates might not display until after the next polling cycle.
-            if (new Date(followedAccountObj.lastDisplayTime) < new Date(followedAccountObj.activityTime)) {
-                activities = await getAccountActivities(followedAccountObj.account, followedAccountObj.lastDisplayTime, apiEndpoint);
-                const content = await processAllItems(...Object.values(activities), followedAccountObj.account, apiEndpoint,
-                 webServerName, accountURL, followedAccountObj.lastDisplayTime, steemObserverName );
+            let content;
+
+            if (new Date(ldt) < new Date(actTime)) {
+                activities = await getAccountActivities(followedAcct, ldt, apiEndpoint);
+                content = await processAllItems(...Object.values(activities), followedAcct, apiEndpoint,
+                    webServerName, accountURL, ldt, steemObserverName);
                 listItem.innerHTML = content;
             }
             if (isEmptyActivityList(activities)) {
-                lastActivity = new Date(`${followedAccountObj.activityTime}`);
+                lastActivity = new Date(`${actTime}`);
             } else {
                 lastActivity = getLastActivityTimeFromAll(activities);
             }
         } catch (error) {
-            console.warn(`Error fetching activities for account ${followedAccountObj.account}:`, error);
+            console.warn(`Error fetching activities for account ${followedAcct} after ${actTime}: ${error}.`);
             // listItem.textContent = `Error fetching activities for account ${followedAccountObj.account}`;
             continue;
         }
@@ -190,8 +199,11 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL)
 }
 
 async function processAllItems(postList, commentList, replyList, account, apiEndpoint, 
-    webServerName, accountURL, lastDisplayTime, steemObserverName) {
+    webServerName, accountURL, lastDisplayTime, steemObserverName ) {
     if (postList.length === 0 && commentList.length === 0 && replyList.length === 0) {
+        return "";
+    }
+    if ( account === steemObserverName && replyList.length === 0 ) {
         return "";
     }
 
@@ -201,10 +213,9 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
             <div class="account-content">
         `;
 
-    if (account !== steemObserverName) {
-        content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, accountURL);
-        content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, accountURL);
-    }
+    console.debug(`Inside processAllItms for ${account} observed by ${steemObserverName}`);
+    content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, accountURL);
+    content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, accountURL);
     content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, accountURL);
 
     content += `
@@ -253,3 +264,55 @@ function convertToPlainText(html) {
 
     return text.trim();
 }
+
+async function getAllIgnoredAccounts(account) {
+    const apiEndpoint = await getApiServerName();
+    const limit = 100;
+    let start = null;
+    const ignoredAccounts = new Set();
+  
+    while (true) {
+      const response = await fetch(apiEndpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'follow_api.get_following',
+          params: {
+            account: account,
+            start: start,
+            type: 'ignore',
+            limit: limit
+          },
+          id: 1
+        })
+      });
+  
+      const data = await response.json();
+  
+      if (!data.result || data.result.length === 0) {
+        break;
+      }
+  
+      data.result.forEach(entry => {
+        if (entry.what.includes('ignore')) {
+          ignoredAccounts.add(entry.following);
+        }
+      });
+  
+      if (data.result.length < limit) {
+        break;
+      }
+  
+      start = data.result[data.result.length - 1].following;
+    }
+  
+    return Array.from(ignoredAccounts);
+  }
+  
+  function removeIgnoredAccounts(accountsWithNewActivity, allIgnores) {
+    return accountsWithNewActivity.filter(activity => !allIgnores.includes(activity.account));
+  }
+  
