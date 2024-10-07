@@ -33,9 +33,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             let uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
+            const nonIgnoredAccountsWithNewActivity = removeIgnoredAccounts(uniqueAccountsWithNewActivity, allIgnores);
+            uniqueAccountsWithNewActivity = nonIgnoredAccountsWithNewActivity;
             uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName);
-            const updatedAccountsWithNewActivity = removeIgnoredAccounts(uniqueAccountsWithNewActivity, allIgnores);
-            uniqueAccountsWithNewActivity = updatedAccountsWithNewActivity;
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
@@ -68,7 +68,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 /*
  * Create the HTML for the posts, replies, and comments.
  */
-async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName) {
+async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName, allIgnores) {
     if (uniqueAccountsWithNewActivity.length === 0) {
         accountsList.innerHTML = '<li>No new activity detected.</li>';
         return;
@@ -83,7 +83,6 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
 
         await updateLock("activityList");
         const listItem = document.createElement('li');
-        const accountURL = `${webServerName}/@${followedAccountObj.account}`;
         let activities = {
             postList: [],
             commentList: [],
@@ -101,7 +100,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
             if (new Date(ldt) < new Date(actTime)) {
                 activities = await getAccountActivities(followedAcct, ldt, apiEndpoint);
                 content = await processAllItems(...Object.values(activities), followedAcct, apiEndpoint,
-                    webServerName, accountURL, ldt, steemObserverName);
+                    webServerName, ldt, steemObserverName, allIgnores);
                 listItem.innerHTML = content;
             }
             if (isEmptyActivityList(activities)) {
@@ -121,7 +120,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
     return uniqueAccountsWithNewActivity;
 }
 
-async function createContentItem(item, type, webServerName, accountURL, rootInfo) {
+async function createContentItem(item, type, webServerName, rootInfo, allIgnores ) {
     // No need to check duplicates here.  They were filtered out earlier.
     let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
 
@@ -137,6 +136,10 @@ async function createContentItem(item, type, webServerName, accountURL, rootInfo
     } else {
         console.warn(`Unexpected ${type} structure:`, item);
         return `<li class="post-box">Error: Invalid ${type} data</li>`;
+    }
+
+    if ( allIgnores.includes ( author ) ) {
+        return;
     }
 
     const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
@@ -172,7 +175,7 @@ async function createContentItem(item, type, webServerName, accountURL, rootInfo
     return content;
 }
 
-async function processItems(items, type, apiEndpoint, webServerName, accountURL) {
+async function processItems(items, type, apiEndpoint, webServerName, allIgnores) {
     let content;
     content = `<div class="indented-content">`;
     let rootInfo;
@@ -181,7 +184,7 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL)
         if (type !== 'post') {
             rootInfo = await getRootInfo(item[1].op[1].author, item[1].op[1].permlink, apiEndpoint);
             if (rootInfo) {
-                console.log(`Got rootInfo: ${rootInfo}`);
+                // console.log(`Got rootInfo: ${rootInfo}`);
                 console.dir(rootInfo);
                 item[1].op[1].root_author = rootInfo.root_author;
                 item[1].op[1].root_permlink = rootInfo.root_permlink;
@@ -190,16 +193,15 @@ async function processItems(items, type, apiEndpoint, webServerName, accountURL)
                 console.debug("Failed to retrieve rootInfo");
             }
         }
-        content += await createContentItem(item, type, webServerName, accountURL, rootInfo);
+        content += await createContentItem(item, type, webServerName, rootInfo, allIgnores );
     }
 
     content += `</ul></div>`;
-    // console.debug(`Exiting processItems, type: ${type}, content: ${content}`);
     return content;
 }
 
 async function processAllItems(postList, commentList, replyList, account, apiEndpoint, 
-    webServerName, accountURL, lastDisplayTime, steemObserverName ) {
+    webServerName, lastDisplayTime, steemObserverName, allIgnores ) {
     if (postList.length === 0 && commentList.length === 0 && replyList.length === 0) {
         return "";
     }
@@ -213,10 +215,9 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
             <div class="account-content">
         `;
 
-    console.debug(`Inside processAllItms for ${account} observed by ${steemObserverName}`);
-    content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, accountURL);
-    content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, accountURL);
-    content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, accountURL);
+    content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint);
+    content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint);
+    content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, allIgnores );
 
     content += `
             </div>
@@ -226,7 +227,7 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
     return content;
 }
 
-async function generateContentSection(list, type, webServerName, account, apiEndpoint, accountURL) {
+async function generateContentSection(list, type, webServerName, account, apiEndpoint, allIgnores = [] ) {
     if (list.length === 0) return '';
 
     const isOpen = list.length < 3 ? 'open' : '';
@@ -236,7 +237,7 @@ async function generateContentSection(list, type, webServerName, account, apiEnd
         <details class="content-details ${pluralType}-details" ${isOpen}>
             <summary class="content-summary"><a href="${webServerName}/@${account}/${pluralType}" target="_blank">${pluralType.charAt(0).toUpperCase() + pluralType.slice(1)} (${list.length}</a>)</summary>
             <div class="content-inner ${pluralType}-content">
-                ${await processItems(list, type, apiEndpoint, webServerName, accountURL)}
+                ${await processItems(list, type, apiEndpoint, webServerName, allIgnores)}
             </div>
         </details>
     `;
