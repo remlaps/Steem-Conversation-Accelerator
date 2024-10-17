@@ -228,8 +228,8 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     if ( newActivity ) {
                         newActivityFound = true;
                     } else {
-                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 3600000 ) {
-                            // Ignore stale conversations (older than 1 hour)
+                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 14400000 ) {
+                            // Ignore stale conversations (older than 4 hours)
                             accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
                         }
                     }
