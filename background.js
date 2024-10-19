@@ -21,7 +21,7 @@ saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorage
  * Other global variables / functions using the arrrow operator.
  */
 let accountsWithNewActivity = [];
-let savedAccountList = [];
+// let savedAccountList = [];  // not used?
 const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 if (typeof browser === "undefined") {
@@ -145,7 +145,7 @@ chrome.notifications.onClicked.addListener(() => {
 //        width: 600,
 //        height: 800
 //    });
-    savedAccountList = [];
+    // savedAccountList = []; // not used?
 });
 
 chrome.runtime.onStartup.addListener(() => {
@@ -167,12 +167,12 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
     if (await acquireLock('background', 1)) { // Lower priority
         // console.log(`array lock set in checkForNewActivitySinceLastNotification ${steemObserverName}.`);
         try {
-            const { currentCheckTime, fifteenMinutesAgo } = await updateCheckTimes();  // clock times as ISO Strings
+            const { currentCheckTime, twoHoursAgo } = await updateCheckTimes();  // clock times as ISO Strings
             let {
                 accountsWithNewActivity,
                 lastCheckedIndex,
                 checkStartTime
-            } = await retrieveAndInitializeProgress(fifteenMinutesAgo);
+            } = await retrieveAndInitializeProgress(twoHoursAgo);
 
             /*
              * get accountsWithNewActivity from storage or set it up with an empty list and 0 length.
@@ -208,6 +208,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                 }
                 const followedAccount = followingList[i];
                 try {
+                    // console.debug(`Getting times for ${followedAccount}`);
                     let searchMin = new Date(`${checkStartTime}`);          // Default in case there is no history for this account.
                     searchMin = new Date(searchMin.getTime() - 15 * 60 * 1000);    // Back up 15 minutes in case of API lag.
                                                                                 
@@ -218,7 +219,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     }
 
                     // Get the most recent post/comment/reply activity
-                    const lastAccountActivityObserved = await getActivityTimeWithRetry(followedAccount, apiNode, searchMin);
+                    const lastAccountActivityObserved = await getActivityTimeWithRetry(followedAccount, steemObserverName, apiNode, searchMin);
                     if (lastAccountActivityObserved === null) {
                         console.warn(`Failed to fetch activity time for ${followedAccount}. Skipping.`);
                         continue;
@@ -227,18 +228,20 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     const newActivity = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if ( newActivity ) {
                         newActivityFound = true;
-                    } else {
-                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 14400000 ) {
-                            // Ignore stale conversations (older than 4 hours)
+                    } /*  Not sure what this accomplishes(?)
+                    else {
+                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 2 * 60 * 60 * 1000 ) {
+                            // Ignore stale conversations (older than 2 hours)
                             accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
                         }
-                    }
+                    } */
 
                     const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if (!shouldContinue) {
                         return;
                     }
 
+                    // console.debug(`Last activity time: ${lastAccountActivityObserved}`);
                     // Add a small delay to avoid overwhelming APIs with low rate limits.
                     await new Promise(resolve => setTimeout(resolve, 150));
 
@@ -306,10 +309,10 @@ function countNewActivities(accountsWithNewActivity) {
     return count;
 }
 
-async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, retries = 10) {
+async function getActivityTimeWithRetry(followedAccount, steemObserverName, apiNode, startTime, retries = 10) {
     for (let i = 0; i < retries; i++) {
         try {
-            const lastAccountActivityObserved = await getActivityTime(followedAccount, apiNode, startTime);
+            const lastAccountActivityObserved = await getActivityTime(followedAccount, steemObserverName, apiNode, startTime);
             if (lastAccountActivityObserved !== null) {
                 return lastAccountActivityObserved;
             }
@@ -326,20 +329,20 @@ async function getActivityTimeWithRetry(followedAccount, apiNode, startTime, ret
     return null;
 }
 
-async function retrieveAndInitializeProgress(fifteenMinutesAgo) {
+async function retrieveAndInitializeProgress(twoHoursAgo) {
     // Retrieve stored progress
     let {lastAlertTime, lastBackgroundPollTime, lastActivityPageViewTime, accountsWithNewActivity, lastCheckedIndex} =
             await chrome.storage.local.get(['lastAlertTime', 'lastBackgroundPollTime', 'lastActivityPageViewTime',
                 'accountsWithNewActivity', 'lastCheckedIndex']);
     
     // Initialize times for polling to fifteen minutes ago, in case they're empty (i.e. first time through)
-    // lastAlertTime = lastAlertTime || fifteenMinutesAgo;
-    // lastBackgroundPollTime = lastBackgroundPollTime || fifteenMinutesAgo;
+    // lastAlertTime = lastAlertTime || twoHoursAgo;
+    // lastBackgroundPollTime = lastBackgroundPollTime || twoHoursAgo;
     if (!lastActivityPageViewTime) {
-        lastActivityPageViewTime = fifteenMinutesAgo;
+        lastActivityPageViewTime = twoHoursAgo;
         await chrome.storage.local.set({'lastActivityPageViewTime': lastActivityPageViewTime});
     } 
-    const checkStartTime = lastActivityPageViewTime;  // last display of the activity list, or fifteen minutes ago.
+    const checkStartTime = lastActivityPageViewTime;  // last display of the activity list, or two hours ago.
 
     return {
         accountsWithNewActivity,
@@ -355,15 +358,15 @@ async function retrieveAndInitializeProgress(fifteenMinutesAgo) {
 
 async function updateCheckTimes() {
     /*
-     * Set times to 15 minutes ago if this hasn't been running, or if local storage got somehow lost.
+     * Set times to two hours ago if this hasn't been running, or if local storage got lost somehow.
      */
     const now = new Date();
     const currentCheckTime = now.toISOString();
-    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000).toISOString();
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000).toISOString();
     
     await chrome.storage.local.set({ 'lastBackgroundPollTime': currentCheckTime });
 
-    return { currentCheckTime, fifteenMinutesAgo };
+    return { currentCheckTime, twoHoursAgo };
 }
 
 async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
@@ -423,11 +426,11 @@ function updateAccountActivity(followedAccount, searchMin, lastAccountActivityOb
 }
 
 function addNewAccountActivity(followedAccount, lastAccountActivityObserved, accountsWithNewActivity) {
-    const oneSecondBefore = new Date(lastAccountActivityObserved.getTime() - 1000);
+    const twoHoursAgo = new Date(lastAccountActivityObserved.getTime() - 2 * 60 * 60 * 1000);
     const newActivity = {
         account: followedAccount,
         activityTime: lastAccountActivityObserved,
-        lastDisplayTime: oneSecondBefore // .toISOString() // or whatever format you prefer
+        lastDisplayTime: twoHoursAgo // .toISOString() // or whatever format you prefer
     };
     accountsWithNewActivity.push(newActivity);
 }
@@ -580,18 +583,18 @@ async function getFollowingListWithRetry(steemObserverName, apiNode, limit = 100
     }
 }
 
-async function getActivityTime(user, apiNode, startTime) {
+async function getActivityTime(user, steemObserverName, apiNode, startTime) {
     try {
         let lastTransaction = -1;
         const chunkSize = 20;
-        const maxChunks = 20; // This will check up to 400 transactions (20 * 20)
-                              //    - If there are more than 400 transactions for the account after the most recent
+        const maxChunks = 40; // This will check up to 800 transactions (20 * 40)
+                              //    - If there are more than 800 transactions for the account after the most recent
                               //       post/comment/reply, it will be missed.  Voting trails may block some posts.
 
         for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
-            if ( lastTransaction > chunkSize ) {
-                lastTransaction = chunkSize;
-            }
+            // if (lastTransaction < 0) {
+            //     lastTransaction = 0;
+            // }
             const postData = JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'condenser_api.get_account_history',
@@ -607,7 +610,7 @@ async function getActivityTime(user, apiNode, startTime) {
 
             if (!response.ok) { 
                 console.warn(`Rate limit hit for ${user}. Waiting before retry.`);
-                await delay(5000); // Wait for 5 seconds before retrying
+                await delay(2000); // Wait for 2 seconds before retrying
                 chunkIndex--; // Retry this chunk
                 continue;
             }
@@ -629,25 +632,38 @@ async function getActivityTime(user, apiNode, startTime) {
 
             // Iterate through the transactions in reverse order (most recent first)
             for (let i = data.result.length - 1; i >= 0; i--) {
-                const [transId, transaction] = data.result[i];
+                const [transId, transaction] = data.result[i];  // destructuring assignments
                 const {timestamp, op} = transaction;
-                const [opType] = op;
+                const [opType] = op;                            // same as opType = op.opType
 
-                // If the activity was a comment and it was not in edit/diff syntax, return the acitivy time.
+                // console.debug(`In getActivityTime, ${user} at ${timestamp}, ${transId} - ${opType}`);
+                // console.debug(JSON.stringify(op, null, 2));
+
+                // If the activity was a comment and it was not in edit/diff syntax, 
+                //    and it was not a post/comment by the observer account,
+                //    then return the acitivy time.
                 if (opType === 'comment' && !op[1].body.startsWith("@@")) {
-                    return new Date(`${timestamp}Z`);
+                    if ( op[1].author === steemObserverName ) {
+                        return new Date("1970-01-01T00:00:00Z");
+                    } else {
+                        return new Date(`${timestamp}Z`);
+                    }
                 }
 
                 if (new Date(startTime) > new Date(`${timestamp}Z`)) {
                     return new Date("1970-01-01T00:00:00Z");
                 }
 
-                lastTransaction = transId - 1;
+                if ( transId > 0 ) {
+                    lastTransaction = transId - 1;
+                } else {
+                    lastTransaction = 0;
+                }
 
             }
 
             // Add a small delay between chunks to avoid rate limiting
-            await delay(100);
+            await delay(200);
         }
 
         return new Date("1970-01-01T00:00:00Z");
@@ -658,14 +674,10 @@ async function getActivityTime(user, apiNode, startTime) {
     }
 }
 
-function newerDate(date1, date2) {
-    return new Date(date1) > new Date(date2) ? date1 : date2;
-}
-
 async function initializeAlertTime() {
     const now = new Date();
-    const fifteenMinutesAgo = new Date(now.getTime() - 15 * 60 * 1000);
-    const lastAlertTime = fifteenMinutesAgo.toISOString(); // Initialize with current UTC date and time if not previously set
+    const twoHoursAgo = new Date(now.getTime() - 2 * 60 * 60 * 1000);
+    const lastAlertTime = twoHoursAgo.toISOString(); // Initialize with current UTC date and time if not previously set
 
     // Save in chrome.storage.local
     await chrome.storage.local.set({'lastAlertTime': lastAlertTime});

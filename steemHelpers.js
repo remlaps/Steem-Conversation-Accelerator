@@ -50,7 +50,10 @@ async function getAccountActivities(account, startTime, apiEndpoint) {
             const [id, { timestamp, op }] = activity;
             const transactionTimeStamp = new Date(`${timestamp}Z`).getTime();
 
-            if (transactionTimeStamp <= startTimeStamp) {
+            if (transactionTimeStamp <= startTimeStamp  || new Date(`${timestamp}Z`) < new Date() - 2 * 60 * 60 * 1000 ) {
+                // console.debug(`Returning from getAccountActivities for ${account}`);
+                // console.debug(`   transactionTimeStamp: ${transactionTimeStamp}, startTimeStamp: ${startTimeStamp}`);
+                // console.debug(`   transactionTimeStamp: ${timestamp}, startTimeStamp: ${startTime}`);
                 return { postList, commentList, replyList };
             }
 

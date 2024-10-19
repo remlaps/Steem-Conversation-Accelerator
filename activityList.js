@@ -220,6 +220,9 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
             <div class="account-content">
         `;
 
+    // console.debug(`account: ${account}, observer: ${steemObserverName},
+        // # posts: ${postList.length}, # comments: ${commentList.length}, # replies: ${replyList.length}`);
+
     // If the account is the observer, we don't need to see posts & comments.  Presumably the observer/author already knows about them.
     // If the account is followed and muted, mute overrides (these should already be removed, earlier, though)
     if (account !== steemObserverName) {
@@ -328,10 +331,6 @@ async function getAllIgnoredAccounts(account) {
   }
   
   function removeIgnoredReplies(replyList, allIgnores) {
-    console.debug(`Before filtering:`);
-    replyList.forEach(reply => console.debug(reply));
     const filteredReplies = replyList.filter(reply => !allIgnores.includes(reply[1].op[1].author));
-    console.debug(`After filtering:`);
-    filteredReplies.forEach(reply => console.debug(reply));
     return filteredReplies;
   }
