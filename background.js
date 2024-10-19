@@ -587,7 +587,7 @@ async function getActivityTime(user, steemObserverName, apiNode, startTime) {
     try {
         let lastTransaction = -1;
         const chunkSize = 20;
-        const maxChunks = 20; // This will check up to 400 transactions (20 * 20)
+        const maxChunks = 50; // This will check up to 1000 transactions (20 * 50)
                               //    - If there are more than 800 transactions for the account after the most recent
                               //       post/comment/reply, it will be missed.  Voting trails may block some posts.
 
@@ -610,7 +610,7 @@ async function getActivityTime(user, steemObserverName, apiNode, startTime) {
 
             if (!response.ok) { 
                 console.warn(`Rate limit hit for ${user}. Waiting before retry.`);
-                await delay(2000); // Wait for 2 seconds before retrying
+                await delay(1000); // Wait for 1 seconds before retrying
                 chunkIndex--; // Retry this chunk
                 continue;
             }
@@ -663,7 +663,7 @@ async function getActivityTime(user, steemObserverName, apiNode, startTime) {
             }
 
             // Add a small delay between chunks to avoid rate limiting
-            await delay(500);
+            await delay(1000);
         }
 
         return new Date("1970-01-01T00:00:00Z");
