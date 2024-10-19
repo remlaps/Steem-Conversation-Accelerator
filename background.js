@@ -587,7 +587,7 @@ async function getActivityTime(user, steemObserverName, apiNode, startTime) {
     try {
         let lastTransaction = -1;
         const chunkSize = 20;
-        const maxChunks = 40; // This will check up to 800 transactions (20 * 40)
+        const maxChunks = 20; // This will check up to 400 transactions (20 * 20)
                               //    - If there are more than 800 transactions for the account after the most recent
                               //       post/comment/reply, it will be missed.  Voting trails may block some posts.
 
@@ -663,7 +663,7 @@ async function getActivityTime(user, steemObserverName, apiNode, startTime) {
             }
 
             // Add a small delay between chunks to avoid rate limiting
-            await delay(200);
+            await delay(500);
         }
 
         return new Date("1970-01-01T00:00:00Z");
