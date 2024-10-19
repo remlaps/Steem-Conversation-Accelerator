@@ -23,6 +23,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     allIgnores = ignoredAccounts;
                 })
                 .catch(error => console.error('Error:', error));
+            // console.debug(`Ignoring the following accounts: ${allIgnores}`);
                 
             /*
              * Display the last displayed time.
@@ -32,10 +33,11 @@ document.addEventListener('DOMContentLoaded', async () => {
                 previousAlertTimeField.textContent = new Date (lastActivityPageViewTime).toLocaleString();
             }
 
+            // If the account is followed and muted, this should remove it.  Replies from muted accounts will still exist.
             let uniqueAccountsWithNewActivity = filterUniqueAccounts(accountsWithNewActivity);
             const nonIgnoredAccountsWithNewActivity = removeIgnoredAccounts(uniqueAccountsWithNewActivity, allIgnores);
             uniqueAccountsWithNewActivity = nonIgnoredAccountsWithNewActivity;
-            uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName);
+            uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName, allIgnores);
 
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
@@ -139,8 +141,11 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
     }
 
     if ( allIgnores.includes ( author ) ) {
-        return;
+        return "ignored";
     }
+    // console.debug(`Inside createContentItem - author:${author}`);
+    // console.debug(`Inside createContentItem - Ignores:${allIgnores}`);
+
 
     const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
     const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
@@ -215,9 +220,17 @@ async function processAllItems(postList, commentList, replyList, account, apiEnd
             <div class="account-content">
         `;
 
-    content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint);
-    content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint);
-    content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, allIgnores );
+    // console.debug(`account: ${account}, observer: ${steemObserverName},
+        // # posts: ${postList.length}, # comments: ${commentList.length}, # replies: ${replyList.length}`);
+
+    // If the account is the observer, we don't need to see posts & comments.  Presumably the observer/author already knows about them.
+    // If the account is followed and muted, mute overrides (these should already be removed, earlier, though)
+    if (account !== steemObserverName) {
+        content += await generateContentSection(postList, 'post', webServerName, account, apiEndpoint, allIgnores);
+        content += await generateContentSection(commentList, 'comment', webServerName, account, apiEndpoint, allIgnores);
+    }
+    replyList = removeIgnoredReplies(replyList, allIgnores); // filter muted accounts
+    content += await generateContentSection(replyList, 'reply', webServerName, account, apiEndpoint, allIgnores);
 
     content += `
             </div>
@@ -268,7 +281,7 @@ function convertToPlainText(html) {
 
 async function getAllIgnoredAccounts(account) {
     const apiEndpoint = await getApiServerName();
-    const limit = 100;
+    const limit = 1000;
     let start = null;
     const ignoredAccounts = new Set();
   
@@ -317,3 +330,7 @@ async function getAllIgnoredAccounts(account) {
     return accountsWithNewActivity.filter(activity => !allIgnores.includes(activity.account));
   }
   
+  function removeIgnoredReplies(replyList, allIgnores) {
+    const filteredReplies = replyList.filter(reply => !allIgnores.includes(reply[1].op[1].author));
+    return filteredReplies;
+  }
