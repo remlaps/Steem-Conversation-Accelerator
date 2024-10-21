@@ -1,7 +1,7 @@
 {
     "manifest_version": 3,
     "name": "Steem Conversation Accelerator (SCA)",
-    "version": "20241019",
+    "version": "20241020",
     "permissions": [
         "alarms",
         "idle",

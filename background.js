@@ -588,13 +588,18 @@ async function getActivityTime(user, steemObserverName, apiNode, startTime) {
         let lastTransaction = -1;
         const chunkSize = 20;
         const maxChunks = 50; // This will check up to 1000 transactions (20 * 50)
-                              //    - If there are more than 800 transactions for the account after the most recent
+                              //    - If there are more than 1000 transactions for the account after the most recent
                               //       post/comment/reply, it will be missed.  Voting trails may block some posts.
 
         for (let chunkIndex = 0; chunkIndex < maxChunks; chunkIndex++) {
             // if (lastTransaction < 0) {
             //     lastTransaction = 0;
             // }
+            if ( chunkIndex % 5 === 0 ) {
+                // heartbeat activity to keep the extension alive.  This shouldn't be necessary, but it seems to be. :-(
+                await updateLock('background')
+            }
+
             const postData = JSON.stringify({
                 jsonrpc: '2.0',
                 method: 'condenser_api.get_account_history',
