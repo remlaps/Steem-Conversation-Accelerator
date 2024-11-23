@@ -183,3 +183,14 @@ async function getNextPollingTime() {
         }
     });
 }
+async function getMaxLookBackTime() {
+    console.debug("Getting max lookback time");
+    const now = new Date();
+    const result = await chrome.storage.local.get("pollingTime");
+    const pollingTime = result.pollingTime;
+    const maxLookBackTime = ( pollingTime < 15 )
+        ? new Date ( now - 30 * 60 * 1000 )
+        : new Date ( now - 2 * pollingTime * 60 * 1000 );
+    console.debug(maxLookBackTime);
+    return maxLookBackTime;
+}
