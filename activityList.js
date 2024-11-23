@@ -2,7 +2,7 @@
 
 document.addEventListener('DOMContentLoaded', async () => {
     const thisActivityPageViewTime = new Date().toISOString();
-    if (await acquireLock('activityList', 2)) { // Higher priority
+    if (await acquireLock('activityList', 2)) { // Higher priority than 'background'
         await clearAllNotifications();
         try {
             console.log(`array lock set in event listener.`);
