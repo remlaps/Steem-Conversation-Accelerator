@@ -30,15 +30,22 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function addTagToDropdown(tag) {
-        const option = document.createElement('option');
-        option.value = tag;
-        option.textContent = tag;
-        tagsDropdown.appendChild(option);
+        // Check if the tag already exists in the dropdown
+        const existingTag = Array.from(tagsDropdown.options).find(option => option.value === tag);
+        if (!existingTag) {
+            const option = document.createElement('option');
+            option.value = tag;
+            option.textContent = tag;
+            tagsDropdown.appendChild(option);
+        }
     }
 
     function saveTags() {
         const tags = Array.from(tagsDropdown.options).map(option => option.value);
         localStorage.setItem('tags', JSON.stringify(tags));
+        chrome.storage.local.set({ tags: tags }, () => {
+            console.log("Tags saved");
+        });
     }
 
     saveButton.addEventListener('click', () => {
