@@ -9,9 +9,11 @@ document.addEventListener('DOMContentLoaded', () => {
     const tagsDropdown = document.getElementById('tagsDropdown');
     const deleteTopTagButton = document.getElementById('deleteTopTagButton');
 
-    // Load tags from local storage
-    const savedTags = JSON.parse(localStorage.getItem('tags')) || [];
-    savedTags.forEach(tag => addTagToDropdown(tag));
+    // Load tags from chrome.storage.local
+    chrome.storage.local.get(['tags'], (result) => {
+        const savedTags = result.tags || [];
+        savedTags.forEach(tag => addTagToDropdown(tag));
+    });
 
     addTagButton.addEventListener('click', function() {
         const tag = newTagInput.value.trim();
@@ -30,7 +32,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function addTagToDropdown(tag) {
-        // Check if the tag already exists in the dropdown
         const existingTag = Array.from(tagsDropdown.options).find(option => option.value === tag);
         if (!existingTag) {
             const option = document.createElement('option');
@@ -42,7 +43,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function saveTags() {
         const tags = Array.from(tagsDropdown.options).map(option => option.value);
-        localStorage.setItem('tags', JSON.stringify(tags));
         chrome.storage.local.set({ tags: tags }, () => {
             console.log("Tags saved");
         });
@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     steemObserverName: accountName,
                     apiServerName: apiServerName,
                     webServerName: webServerName,
-                    tags: tags // Save tags in local storage
+                    tags: tags
                 }, () => {
                     console.log("Settings saved");
                     showCustomAlert('Settings saved');
@@ -81,15 +81,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Load saved settings
     window.onload = () => {
-        // Make the window fit the HTML body.
         resizeWindow();
 
-        /*
-         * custom alert button that's small enough to fit in the popup window.
-         */
-        // Get the custom alert OK button
         const customAlertOkButton = document.getElementById('customAlertOkButton');
-        // Add click event listener to the custom alert OK button
         customAlertOkButton.addEventListener('click', closeCustomAlert);
 
         async function displayActivityInfo() {
@@ -98,11 +92,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 lockOwner = lockInfo.owner;
                 lockTime = lockInfo.lockedAt;
 
-                // Set HTML elements
                 document.getElementById('lockStatusText').textContent = `${lockOwner}`;
                 document.getElementById('lockStatusTime').textContent = new Date(lockTime).toLocaleString();
             } else {
-                // Handle the case where there's no lock
                 document.getElementById('lockStatusText').textContent = 'Paused';
                 document.getElementById('lockStatusTime').textContent = '-';
             }
@@ -110,10 +102,8 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log(`Next alarm time: ${nextPollTime}`);
         }; displayActivityInfo();
 
-        // Repeat every 15 seconds
         let intervalId = setInterval(displayActivityInfo, 15000);
 
-        // Clear the interval when the window is closed
         window.addEventListener('beforeunload', () => {
             clearInterval(intervalId);
         });
@@ -138,7 +128,6 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     function resizeWindow() {
-        // Get the element with the class 'popup-settings-body'
         const popupBody = document.querySelector('.popup-settings-body');
 
         if (!popupBody) {
@@ -146,28 +135,22 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        // Get the computed style of the popup body
         const popupStyle = window.getComputedStyle(popupBody);
 
-        // Read the width and height
         let width = parseInt(popupStyle.width);
         let height = parseInt(popupStyle.height);
 
-        // Add padding (left + right for width, top + bottom for height)
         width += parseInt(popupStyle.paddingLeft) + parseInt(popupStyle.paddingRight);
         height += parseInt(popupStyle.paddingTop) + parseInt(popupStyle.paddingBottom);
 
-        // Add border (left + right for width, top + bottom for height)
         width += parseInt(popupStyle.borderLeftWidth) + parseInt(popupStyle.borderRightWidth);
         height += parseInt(popupStyle.borderTopWidth) + parseInt(popupStyle.borderBottomWidth);
 
-        // Add a small buffer for any potential scrollbars or browser-specific elements
         const xbuffer = 17;
         const ybuffer = 39;
         width += xbuffer;
         height += ybuffer;
 
-        // Resize the window
         window.resizeTo(width, height);
     }
 

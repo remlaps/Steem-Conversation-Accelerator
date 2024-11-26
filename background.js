@@ -13,6 +13,13 @@
 importScripts ('commonUtils.js');
 importScripts('localStorageUtils.js');
 importScripts('steemHelpers.js');
+importScripts('commentFetcher.js');
+
+let commentFetcher;
+async function initializeCommentFetcher() {
+    const apiServerName = await getApiServerName();
+    commentFetcher = new CommentFetcher(apiServerName);
+}; initializeCommentFetcher();
 
 let isCheckingActivity = false;
 saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorageUtils.js"
@@ -120,8 +127,12 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         // console.log("Alarm recieved.");
         chrome.storage.local.get(['steemObserverName'], async (result) => {
             const steemObserverName = result.steemObserverName;
+            commentFetcher.changeApiEndpoint(await getApiServerName());
             if (steemObserverName) {
-                await checkForNewActivitySinceLastNotification(steemObserverName);
+                const [newActivityResult, fetchedCommentsResult] = await Promise.all([
+                    checkForNewActivitySinceLastNotification(steemObserverName),
+                    commentFetcher.fetchComments()
+                ]);
             } else {
                 console.debug('Alarm triggered, but the Steem username is not set in SCA.');
                 console.debug('Please set it in the extension settings.');
@@ -243,8 +254,8 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     }
 
                     // console.debug(`Last activity time: ${lastAccountActivityObserved}`);
-                    // Add a small delay to avoid overwhelming APIs with low rate limits.
-                    await new Promise(resolve => setTimeout(resolve, 150));
+                    // Add a small delay to minimize rate-limiting.
+                    await new Promise(resolve => setTimeout(resolve, 300));
 
                 } catch (error) {
                     console.warn(`Error checking activity for ${followedAccount}:`, error);
