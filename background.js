@@ -131,7 +131,8 @@ chrome.alarms.onAlarm.addListener((alarm) => {
             if (steemObserverName) {
                 const [newActivityResult, fetchedCommentsResult] = await Promise.all([
                     checkForNewActivitySinceLastNotification(steemObserverName),
-                    commentFetcher.fetchComments()
+                    commentFetcher.fetchComments(),
+                    commentFetcher.saveComments()
                 ]);
             } else {
                 console.debug('Alarm triggered, but the Steem username is not set in SCA.');

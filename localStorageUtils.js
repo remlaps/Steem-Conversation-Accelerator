@@ -1,6 +1,12 @@
 /* global chrome */
 
 // localStorageUtils.js
+const tagLock = {
+    locked: false,
+    scriptName: null,
+    priority: 0,
+    timestamp: 0
+};
 
 function getApiServerName() {
     return new Promise((resolve, reject) => {
@@ -78,8 +84,8 @@ async function acquireLock(scriptName, priority, maxStaleTime = 120000, maxWaitT
             (priority <= result.processingLock.priority) && (scriptName !== result.processingLock.scriptName)) {
             console.debug(`Nope.  Lock attempt from ${scriptName} rejected.  Lock held by ${result.processingLock.scriptName}`);
         } else {
-            if ( result.processingLock ) {
-                if ( priority > result.processingLock.priority) {
+            if (result.processingLock) {
+                if (priority > result.processingLock.priority) {
                     console.log(`${scriptName} is preempting ${result.processingLock.scriptName}`);
                     // Reset background.js progress if it's preempted
                     if (result.processingLock.scriptName === 'background') {
@@ -87,11 +93,11 @@ async function acquireLock(scriptName, priority, maxStaleTime = 120000, maxWaitT
                     }
                 }
 
-                if ( now - result.processingLock.timestamp > maxStaleTime ) {
+                if (now - result.processingLock.timestamp > maxStaleTime) {
                     console.log(`${scriptName}: claiming stale lock.`);
                 }
 
-                if ( scriptName === result.processingLock.scriptName) {
+                if (scriptName === result.processingLock.scriptName) {
                     console.log(`${scriptName} claiming lock from itself.`);
                 }
             }
@@ -192,4 +198,83 @@ async function maintainDuplicateTable(author, permlink) {
 
 async function deleteDuplicateTable() {
     await chrome.storage.local.remove('duplicateTable');
+}
+
+// Function to acquire the tag lock
+async function acquireTaggedCommentsLock(scriptName, priority, maxStaleTime = 120000, maxWaitTime = 30000) {
+    const startTime = Date.now();
+
+    async function attemptLock() {
+        const now = Date.now();
+        const result = await chrome.storage.sync.get(['tagLock']);
+        const currentLock = result.tagLock || {};
+
+        console.log(`${scriptName} is attempting to acquire the tag lock`);
+
+        if (currentLock.locked && (now - currentLock.timestamp <= maxStaleTime) &&
+            (priority <= currentLock.priority) && (scriptName !== currentLock.scriptName)) {
+            console.debug(`Nope. Tag lock attempt from ${scriptName} rejected. Lock held by ${currentLock.scriptName}`);
+        } else {
+            if (currentLock.locked) {
+                if (priority > currentLock.priority) {
+                    console.log(`${scriptName} is preempting ${currentLock.scriptName}`);
+                }
+
+                if (now - currentLock.timestamp > maxStaleTime) {
+                    console.log(`${scriptName}: claiming stale tag lock.`);
+                }
+
+                if (scriptName === currentLock.scriptName) {
+                    console.log(`${scriptName} claiming tag lock from itself.`);
+                }
+            }
+
+            await chrome.storage.sync.set({
+                tagLock: {
+                    scriptName: scriptName,
+                    priority: priority,
+                    timestamp: now
+                }
+            });
+            console.debug(`${scriptName} got the tag lock.`);
+            tagLock.locked = true;
+            tagLock.scriptName = scriptName;
+            tagLock.priority = priority;
+            tagLock.timestamp = now;
+            return true;
+        }
+
+        if (now - startTime < maxWaitTime) {
+            await sleep(15);
+            return await attemptLock();
+        }
+
+        return false;
+    }
+
+    return await attemptLock();
+}
+
+// Function to release the tag lock
+async function releaseTaggedCommentsLock(scriptName) {
+    console.log(`${scriptName} is attempting to release the tag lock`);
+    const result = await chrome.storage.sync.get('tagLock');
+    const currentLock = result.tagLock || {};
+
+    if (currentLock.locked && currentLock.scriptName === scriptName) {
+        await chrome.storage.sync.remove('tagLock');
+        console.log(`${scriptName} has successfully released the tag lock`);
+        tagLock.locked = false;
+        tagLock.scriptName = null;
+        tagLock.priority = 0;
+        tagLock.timestamp = 0;
+        return true;
+    }
+    console.log(`${scriptName} failed to release the tag lock (not owner or lock not found)`);
+    return false;
+}
+
+async function sleep(sleepTime) {
+    const sleepMS = sleepTime * 1000;
+    await new Promise(resolve => setTimeout(resolve, sleepMS));
 }

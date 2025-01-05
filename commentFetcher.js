@@ -8,6 +8,7 @@ class CommentFetcher {
         this.lastProcessedDate = null;
         this.currentStart = null;
         this.cutoffTime = null;
+        this.taggedCommentsBuffer = []; // Temporary buffer to store tagged comments
     }
 
     async initializeStartTime() {
@@ -21,20 +22,20 @@ class CommentFetcher {
             now.getUTCMinutes(),
             now.getUTCSeconds()
         ));
-        
+
         // Get 30 minutes ago in UTC
         const thirtyMinutesAgo = new Date(utcNow.getTime() - (30 * 60 * 1000));
-        
+
         // Set initial start time to 7 days after thirty minutes ago
         this.currentStart = new Date(thirtyMinutesAgo.getTime() + (7 * 24 * 60 * 60 * 1000))
             .toISOString()
             .replace(/\.\d{3}Z$/, '');
-        
+
         this.cutoffTime = thirtyMinutesAgo.toISOString().replace(/\.\d{3}Z$/, '');
-        
+
         console.log('UTC Now:', utcNow.toISOString());
         console.log('Cutoff time:', this.cutoffTime);
-        
+
         const stored = await chrome.storage.local.get(['lastProcessedDate']);
         if (stored && stored.lastProcessedDate) {
             this.lastProcessedDate = stored.lastProcessedDate;
@@ -88,14 +89,14 @@ class CommentFetcher {
                 });
 
                 const data = await response.json();
-                
+
                 if (!data.result?.comments || !Array.isArray(data.result.comments)) {
                     console.log("No comments in response or invalid format");
                     return false;
                 }
 
                 const comments = data.result.comments;
-                
+
                 if (comments.length === 0) {
                     console.log("No comments to process");
                     return false;
@@ -103,17 +104,20 @@ class CommentFetcher {
 
                 let newDataFound = false;
                 let reachedCurrentTime = false;
-                
+
                 for (const comment of comments) {
                     const {
                         author,
-                        title,
-                        depth,
+                        body,
                         created,
+                        depth,
+                        parent_author,
+                        parent_permlink,
                         permlink,
                         root_author,
                         root_permlink,
-                        json_metadata
+                        json_metadata,
+                        title
                     } = comment;
 
                     if (created.startsWith('2016')) {
@@ -141,6 +145,8 @@ class CommentFetcher {
                             } else {
                                 if (depth === 0) {
                                     console.warn('jsonMeta.tags is not an array:', jsonMeta.tags);
+                                    console.warn(`@${author}/${permlink}`);
+                                    tags = `${jsonMeta.tags};`;
                                 }
                             }
                         } catch (e) {
@@ -180,14 +186,15 @@ class CommentFetcher {
                         .toISOString()
                         .replace(/\.\d{3}Z$/, '');
                 }
+                this.saveComments();
                 console.log(`Fetch complete: ${this.currentStart}`);
 
                 totalProcessed += comments.length;
                 console.log(`Processed batch of ${comments.length} comments (total: ${totalProcessed})`);
 
-                keepFetching = newDataFound && 
-                             comments.length === LIMIT && 
-                             !reachedCurrentTime;
+                keepFetching = newDataFound &&
+                    comments.length === LIMIT &&
+                    !reachedCurrentTime;
 
                 if (reachedCurrentTime) {
                     console.log("Caught up to current time");
@@ -223,10 +230,13 @@ class CommentFetcher {
 
         const poll = async () => {
             if (!this.isRunning) return;
-            
+
             console.log(`Fetching comments from ${this.currentStart}`);
             const hasMore = await this.fetchComments();
-            
+
+            // Save comments to storage after fetching
+            await this.saveComments();
+
             setTimeout(poll, intervalMinutes * 60 * 1000);
         };
 
@@ -240,40 +250,6 @@ class CommentFetcher {
     changeApiEndpoint(apiEndpoint) {
         this.apiEndpoint = apiEndpoint;
     }
-    
-    logComments(comment, tags, tagFilters = '') {
-        const {
-            author,
-            title,
-            depth,
-            created,
-            permlink,
-            root_author,
-            root_permlink,
-            json_metadata
-        } = comment;
-      
-        // Split the tags string into an array of words
-        const tagArray = tags.split(';');
-      
-        // Check if any tag in the tagArray matches any tagFilter
-        const isMatch = tagArray.some(filter => tagFilters.includes(filter));
-      
-        // Log the comment if tagFilters is empty or there's a match
-        if (tagFilters.length === 0 || isMatch) {
-          console.log({
-            author,
-            permlink,
-            title,
-            depth,
-            created,
-            root_author,
-            root_permlink,
-            tags
-          });
-        }
-      }
-      
 
     getMetrics() {
         return {
@@ -282,5 +258,88 @@ class CommentFetcher {
             authorsList: Array.from(this.authors),
             lastProcessedDate: this.lastProcessedDate
         };
+    }
+
+    logComments(comment, tags, tagFilters = '') {
+        const {
+            author,
+            body,
+            created,
+            depth,
+            json_metadata,
+            parent_author,
+            parent_permlink,
+            permlink,
+            root_author,
+            root_permlink,
+            title
+        } = comment;
+
+        // Split the tags string into an array of words
+        const tagArray = tags.split(';');
+
+        // Check if any tag in the tagArray matches any tagFilter
+        const isMatch = tagArray.some(filter => tagFilters.includes(filter));
+
+        // Create a record object
+        const record = {
+            author,
+            body,
+            created,
+            depth,
+            json_metadata,
+            parent_author,
+            parent_permlink,
+            permlink,
+            root_author,
+            root_permlink,
+            tags,
+            title
+        };
+
+        // Log the comment if tagFilters is empty or there's a match
+        if (tagFilters.length === 0 || isMatch) {
+            console.log(record);
+            // Store the record in the buffer
+            this.taggedCommentsBuffer.push(record);
+        }
+    }
+
+    // In commentFetcher.js
+    async saveComments() {
+        if (this.taggedCommentsBuffer.length === 0) {
+            console.log('No comments to save');
+            return;
+        }
+
+        // Acquire the tag lock with lower priority
+        const lockAcquired = await acquireTaggedCommentsLock('background', 1);
+        if (!lockAcquired) {
+            console.log('Failed to acquire tag lock, retrying later');
+            return;
+        }
+
+        try {
+            // Get existing tagged comments from storage
+            const result = await chrome.storage.local.get('taggedComments');
+            const existingComments = result.taggedComments || [];
+
+            // Concatenate new comments with existing comments
+            const allComments = existingComments.concat(this.taggedCommentsBuffer);
+
+            // Save the combined list back to storage
+            await chrome.storage.local.set({ taggedComments: allComments });
+
+            console.log('Comments saved successfully');
+        } catch (error) {
+            console.error('Error saving comments:', error);
+        } finally {
+            // Release the tag lock
+            await releaseTaggedCommentsLock('background');
+            console.log('Tag lock released');
+
+            // Clear the buffer after saving
+            this.taggedCommentsBuffer = [];
+        }
     }
 }

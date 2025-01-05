@@ -39,6 +39,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             uniqueAccountsWithNewActivity = nonIgnoredAccountsWithNewActivity;
             uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName, allIgnores);
 
+            // Fetch and display tagged comments
+            await displayTaggedComments();
+
+            lockReadDeleteTaggedComments();
+
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
                 .then(() => {
@@ -60,6 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         console.log(`Could not get array lock in activityList.`);
     }
+
     await deleteDuplicateTable();
      // After all data is loaded and the page is populated, change the background color
      document.body.style.backgroundColor = getComputedStyle(document.documentElement)
@@ -94,17 +100,24 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
         const ldt = followedAccountObj.lastDisplayTime;
         const followedAcct = followedAccountObj.account;
         const actTime = followedAccountObj.activityTime;
-        try {
-            // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
-            // This means that some accounts with updates might not display until after the next polling cycle.
-            let content;
 
-            if (new Date(ldt) < new Date(actTime)) {
+        try {
+            const maxLookBackTime = await getMaxLookBackTime(); // Get the maximum lookback time
+            // Convert maxLookBackTime to a Date object in UTC
+            const maxLookBackDate = new Date(maxLookBackTime);
+
+
+            // Only process if maxLookBackTime is newer than ldt
+            if ( new Date(ldt) > maxLookBackDate ) {
+                console.debug(`Processing ${ldt}, after ${maxLookBackDate.toISOString()}`);
                 activities = await getAccountActivities(followedAcct, ldt, apiEndpoint);
                 content = await processAllItems(...Object.values(activities), followedAcct, apiEndpoint,
                     webServerName, ldt, steemObserverName, allIgnores);
                 listItem.innerHTML = content;
+            } else {
+                console.debug(`Skipping ${ldt}, before ${maxLookBackDate.toISOString()}`);
             }
+
             if (isEmptyActivityList(activities)) {
                 lastActivity = new Date(`${actTime}`);
             } else {
@@ -112,7 +125,6 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
             }
         } catch (error) {
             console.warn(`Error fetching activities for account ${followedAcct} after ${actTime}: ${error}.`);
-            // listItem.textContent = `Error fetching activities for account ${followedAccountObj.account}`;
             continue;
         }
 
@@ -121,6 +133,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
     }
     return uniqueAccountsWithNewActivity;
 }
+
 
 async function createContentItem(item, type, webServerName, rootInfo, allIgnores ) {
     // No need to check duplicates here.  They were filtered out earlier.
@@ -334,3 +347,86 @@ async function getAllIgnoredAccounts(account) {
     const filteredReplies = replyList.filter(reply => !allIgnores.includes(reply[1].op[1].author));
     return filteredReplies;
   }
+
+  async function lockReadDeleteTaggedComments() {
+    // Acquire the tagged comments lock with higher priority
+    const lockAcquired = await acquireTaggedCommentsLock('activityList', 2);
+    if (!lockAcquired) {
+        console.log('Failed to acquire tag lock, retrying later');
+        return;
+    }
+
+    try {
+        // Read the stored tagged comments from chrome.storage.local
+        const result = await chrome.storage.local.get('taggedComments');
+        const taggedComments = result.taggedComments || [];
+
+        // Log the stored tagged comments
+        console.log('Stored tagged comments:', taggedComments);
+
+        // Process the list of tagged comments (e.g., log each comment)
+        taggedComments.forEach(comment => {
+            console.log('Processing comment:', comment);
+            // You can add additional processing logic here if needed
+        });
+
+        // Delete the stored tagged comments
+        await chrome.storage.local.set({ taggedComments: [] });
+        console.log('Tagged comments deleted from storage');
+    } catch (error) {
+        console.error('Error processing tagged comments:', error);
+    } finally {
+        // Release the tagged comments lock
+        await releaseTaggedCommentsLock('activityList');
+        console.log('Tag lock released');
+    }
+}
+
+async function displayTaggedComments() {
+    const result = await chrome.storage.local.get('taggedComments');
+    const taggedComments = result.taggedComments || [];
+    const taggedCommentsList = document.getElementById('taggedCommentsList');
+
+    // Clear the existing list
+    taggedCommentsList.innerHTML = '';
+
+    if (taggedComments.length === 0) {
+        taggedCommentsList.innerHTML = '<li>No tagged comments found.</li>';
+        return;
+    }
+
+    // Create list items for each tagged comment
+    const webServerName = await getWebServerName();
+    taggedComments.forEach(comment => {
+        const { author, permlink, title, body = "", tags } = comment;
+        const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
+        const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
+    
+        const listItem = document.createElement('li');
+        listItem.innerHTML = `
+            <accountDetails class="account-details" open>
+                <accountSummary class="account-summary">
+                    <b>Author</b>: Author information goes here.<br>
+                </accountSummary>
+                <accountContent class="account-content">
+                    <contentDetails class="content-details">
+                        <contentSummary class="content-summary">
+                            <b>Type</b>: Title goes here
+                        </contentSummary>
+                        <postdetails class="post-details" open>
+                            <div class="post-box">
+                                <b>Title</b>: <a href="${webServerName}/@${author}/${permlink}" target="_blank">
+                                ${title}
+                                </a><br>
+                                <b>Body snippet</b>: ${bodySnippet}<br>
+                                <a href="${webServerName}/@${author}/${permlink}" target="_blank">View Post</a><br>
+                                <b>Tags</b>: ${tags.replace(/;/g, ', ')}
+                            </div>
+                        </postDetails>
+                    </contentDetails>
+                </accountContent>
+            </accountDetails>
+        `;
+        taggedCommentsList.appendChild(listItem);
+    });
+}
