@@ -386,6 +386,7 @@ async function displayTaggedComments() {
     const result = await chrome.storage.local.get('taggedComments');
     const taggedComments = result.taggedComments || [];
     const taggedCommentsList = document.getElementById('taggedCommentsList');
+    const apiEndpoint = await getApiServerName();
 
     // Clear the existing list
     taggedCommentsList.innerHTML = '';
@@ -395,38 +396,62 @@ async function displayTaggedComments() {
         return;
     }
 
-    // Create list items for each tagged comment
+    // Create a Set to track unique comments
+    const uniqueComments = new Set();
+    const uniqueTaggedComments = taggedComments.filter(comment => {
+        const identifier = `${comment.author}-${comment.permlink}`;
+        if (!uniqueComments.has(identifier)) {
+            uniqueComments.add(identifier);
+            return true; // Keep this comment
+        }
+        return false; // Skip this comment
+    });
+
+    // Create list items for each unique tagged comment
     const webServerName = await getWebServerName();
-    taggedComments.forEach(comment => {
+    uniqueTaggedComments.forEach(async comment => {
         const { author, permlink, title, body = "", tags } = comment;
         const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
         const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
     
+        let replyTitleLabel = "";
+        if ( ! title ) {
+            const Post = await getContent(author, permlink);
+            replyTitleLabel = `Re: ${Post.root_title}`;
+        };
+        const displayTitle = replyTitleLabel || title || "No title available";
+
+        console.debug(`Root title: ${replyTitleLabel}, Title: ${title}, Display title: ${displayTitle}`);
         const listItem = document.createElement('li');
         listItem.innerHTML = `
-            <accountDetails class="account-details" open>
-                <accountSummary class="account-summary">
-                    <b>Author</b>: Author information goes here.<br>
-                </accountSummary>
-                <accountContent class="account-content">
-                    <contentDetails class="content-details">
-                        <contentSummary class="content-summary">
-                            <b>Type</b>: Title goes here
-                        </contentSummary>
+            <div class="account-content" open>
+                <details class="account-details" open>
+                    <summary class="account-summary">
+                        <a href="${webServerName}/@${author}" target="_blank">@${author}</a>
+                    </summary>
+                    <details class="content-details" open>
+                        <summary class="content-summary">
+                            <a href="${webServerName}/@${author}/${permlink}" target="_blank">${displayTitle}</a>
+                        </summary>
                         <postdetails class="post-details" open>
-                            <div class="post-box">
-                                <b>Title</b>: <a href="${webServerName}/@${author}/${permlink}" target="_blank">
-                                ${title}
-                                </a><br>
-                                <b>Body snippet</b>: ${bodySnippet}<br>
-                                <a href="${webServerName}/@${author}/${permlink}" target="_blank">View Post</a><br>
-                                <b>Tags</b>: ${tags.replace(/;/g, ', ')}
+                            <div class="content-inner">
+                                <div class="indented-content">
+                                    <div class="post-box">
+                                        <b>Tags</b>: ${typeof tags === 'string' ? tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') : 'No tags available'}<br>
+                                        <b>Body snippet</b>: ${bodySnippet}<br>
+                                    </div>
+                                </div>
                             </div>
                         </postDetails>
-                    </contentDetails>
-                </accountContent>
-            </accountDetails>
+                    </details>
+                </details>
+            </div>
         `;
         taggedCommentsList.appendChild(listItem);
     });
+
+    async function getContent(author, permlink) {
+        const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
+        return await fetcher.fetchContent(author, permlink); // Call the fetchContent method
+    }
 }

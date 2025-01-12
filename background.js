@@ -21,6 +21,7 @@ async function initializeCommentFetcher() {
     commentFetcher = new CommentFetcher(apiServerName);
 }; initializeCommentFetcher();
 
+
 let isCheckingActivity = false;
 saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorageUtils.js"
 
