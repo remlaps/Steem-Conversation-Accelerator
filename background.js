@@ -14,6 +14,7 @@ importScripts ('commonUtils.js');
 importScripts('localStorageUtils.js');
 importScripts('steemHelpers.js');
 importScripts('commentFetcher.js');
+importScripts('contentFetcher.js');
 
 let commentFetcher;
 async function initializeCommentFetcher() {

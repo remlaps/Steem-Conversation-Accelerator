@@ -84,6 +84,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
 
     const apiEndpoint = await getApiServerName();
     const webServerName = await getWebServerName();
+    let activityFound = false;
 
     for (const followedAccountObj of uniqueAccountsWithNewActivity) {
         let lastActivity;
@@ -109,19 +110,17 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
 
             // Only process if maxLookBackTime is newer than ldt
             if ( new Date(ldt) > maxLookBackDate ) {
-                console.debug(`Processing ${ldt}, after ${maxLookBackDate.toISOString()}`);
                 activities = await getAccountActivities(followedAcct, ldt, apiEndpoint);
                 content = await processAllItems(...Object.values(activities), followedAcct, apiEndpoint,
                     webServerName, ldt, steemObserverName, allIgnores);
                 listItem.innerHTML = content;
-            } else {
-                console.debug(`Skipping ${ldt}, before ${maxLookBackDate.toISOString()}`);
-            }
+            } 
 
             if (isEmptyActivityList(activities)) {
                 lastActivity = new Date(`${actTime}`);
             } else {
                 lastActivity = getLastActivityTimeFromAll(activities);
+                activityFound = true;
             }
         } catch (error) {
             console.warn(`Error fetching activities for account ${followedAcct} after ${actTime}: ${error}.`);
@@ -131,17 +130,21 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
         accountsList.appendChild(listItem);
         uniqueAccountsWithNewActivity = updateLastDisplayTime(uniqueAccountsWithNewActivity, followedAccountObj.account, lastActivity);
     }
+    if ( ! activityFound ) {
+        accountsList.innerHTML = '<li>No new activity detected.</li>';
+    }
     return uniqueAccountsWithNewActivity;
 }
 
 
 async function createContentItem(item, type, webServerName, rootInfo, allIgnores ) {
     // No need to check duplicates here.  They were filtered out earlier.
-    let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
+    let author, title, permlink, body, timestamp, parent_author, parent_permlink, depth, root_author, root_permlink, root_title;
 
     if (item && item[1] && item[1].op && Array.isArray(item[1].op) && item[1].op.length > 1 && item[1].op[1]) {
         const itemData = item[1].op[1];
         author = itemData.author || "Undefined author";
+        depth = itemData.depth || 0;
         title = itemData.title || "Title missing";
         permlink = itemData.permlink || "Permlink missing";
         body = itemData.body || "Body is empty";
@@ -167,16 +170,26 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
 
     content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${new Date(timestamp + 'Z').toLocaleString()}</a><br>`;
 
+    const apiEndpoint = await getApiServerName();
+    const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
+    let tags = "[]";
+
     if (type === 'post') {
         content += `<strong>Post: <A HREF="${webServerName}/@${author}/${permlink}" target="_blank">${title}</a></strong>`;
+        const Post = await fetcher.getContent(author, permlink, depth);
+        tags = fetcher.getTags(Post.category, Post.json_metadata);
     } else {
         // For comments and replies
 
         const root_author = rootInfo.root_author;
         const root_permlink = rootInfo.root_permlink;
         const root_title = rootInfo.root_title;
+        const root_depth = rootInfo.root_depth;
 
         content += `<strong>Thread: </strong><a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
+
+        const rootPost = await fetcher.getContent(root_author, root_permlink, root_depth);
+        tags = fetcher.getTags(rootPost.category, rootPost.json_metadata);
 
         if (parent_author !== root_author || parent_permlink !== root_permlink) {
             // This is a nested reply
@@ -184,6 +197,11 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
         }
     }
 
+
+
+    content += `<b>Tags</b>: ${typeof tags === 'string' ?
+        tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') :
+        'No tags available'}<br>`;
     content += '<br><br>';
     content += `${bodySnippet}...`;
     content += '<br>';
@@ -392,7 +410,7 @@ async function displayTaggedComments() {
     taggedCommentsList.innerHTML = '';
 
     if (taggedComments.length === 0) {
-        taggedCommentsList.innerHTML = '<li>No tagged comments found.</li>';
+        taggedCommentsList.innerHTML = '<li>No activity found under followed tags.</li>';
         return;
     }
 
@@ -415,10 +433,11 @@ async function displayTaggedComments() {
         const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
     
         let replyTitleLabel = "";
-        if ( ! title ) {
-            const Post = await getContent(author, permlink);
-            replyTitleLabel = `Re: ${Post.root_title}`;
-        };
+        if (!title) {
+            const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
+            const Post = await fetcher.getContent(author, permlink); // Call the getContent method
+            replyTitleLabel = `Re: ${Post.root_title}`; // Assuming Post.root_title is defined
+        }
         const displayTitle = replyTitleLabel || title || "No title available";
 
         console.debug(`Root title: ${replyTitleLabel}, Title: ${title}, Display title: ${displayTitle}`);
@@ -437,7 +456,9 @@ async function displayTaggedComments() {
                             <div class="content-inner">
                                 <div class="indented-content">
                                     <div class="post-box">
-                                        <b>Tags</b>: ${typeof tags === 'string' ? tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') : 'No tags available'}<br>
+                                        <b>Tags</b>: ${typeof tags === 'string' ?
+                                            tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') :
+                                            'No tags available'}<br>
                                         <b>Body snippet</b>: ${bodySnippet}<br>
                                     </div>
                                 </div>
@@ -449,9 +470,4 @@ async function displayTaggedComments() {
         `;
         taggedCommentsList.appendChild(listItem);
     });
-
-    async function getContent(author, permlink) {
-        const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
-        return await fetcher.fetchContent(author, permlink); // Call the fetchContent method
-    }
 }

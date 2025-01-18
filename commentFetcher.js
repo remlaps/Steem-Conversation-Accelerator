@@ -109,6 +109,7 @@ class CommentFetcher {
                     const {
                         author,
                         body,
+                        category,
                         created,
                         depth,
                         parent_author,
@@ -136,23 +137,14 @@ class CommentFetcher {
                     }
 
                     newDataFound = true;
-                    let tags = '';
-                    if (json_metadata && typeof json_metadata === 'string' && json_metadata.trim() !== '') {
-                        try {
-                            const jsonMeta = JSON.parse(json_metadata);
-                            if (Array.isArray(jsonMeta.tags)) {
-                                tags = jsonMeta.tags.join(';');
-                            } else {
-                                if (depth === 0) {
-                                    console.warn('jsonMeta.tags is not an array:', jsonMeta.tags);
-                                    console.warn(`@${author}/${permlink}`);
-                                    tags = `${jsonMeta.tags};`;
-                                }
-                            }
-                        } catch (e) {
-                            console.warn('Error parsing json_metadata:', e);
-                        }
+                    const fetcher = new ContentFetcher(this.apiEndpoint);
+                    let tags = fetcher.getTags(category, json_metadata);
+                    if ( root_author !== author || root_permlink !== permlink ) {
+                        const rootPost = fetcher.getContent(root_author, root_permlink);
+                        const rootJsonMetadata = rootPost.json_metadata;
+                        tags = `${tags};${fetcher.getTags(rootPost.category, rootJsonMetadata, rootPost.depth)}`;
                     }
+
 
                     // Load tags from chrome.storage.local
                     let savedTags = '';
