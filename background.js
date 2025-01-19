@@ -13,6 +13,15 @@
 importScripts ('commonUtils.js');
 importScripts('localStorageUtils.js');
 importScripts('steemHelpers.js');
+importScripts('commentFetcher.js');
+importScripts('contentFetcher.js');
+
+let commentFetcher;
+async function initializeCommentFetcher() {
+    const apiServerName = await getApiServerName();
+    commentFetcher = new CommentFetcher(apiServerName);
+}; initializeCommentFetcher();
+
 
 let isCheckingActivity = false;
 saveIsCheckingActivity(isCheckingActivity);  // This is defined in "localStorageUtils.js"
@@ -120,8 +129,13 @@ chrome.alarms.onAlarm.addListener((alarm) => {
         // console.log("Alarm recieved.");
         chrome.storage.local.get(['steemObserverName'], async (result) => {
             const steemObserverName = result.steemObserverName;
+            commentFetcher.changeApiEndpoint(await getApiServerName());
             if (steemObserverName) {
-                await checkForNewActivitySinceLastNotification(steemObserverName);
+                const [newActivityResult, fetchedCommentsResult] = await Promise.all([
+                    checkForNewActivitySinceLastNotification(steemObserverName),
+                    commentFetcher.fetchComments(),
+                    commentFetcher.saveComments()
+                ]);
             } else {
                 console.debug('Alarm triggered, but the Steem username is not set in SCA.');
                 console.debug('Please set it in the extension settings.');
@@ -229,13 +243,14 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     const newActivity = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if ( newActivity ) {
                         newActivityFound = true;
-                    } /*  Not sure what this accomplishes(?)
+                    }
                     else {
-                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 2 * 60 * 60 * 1000 ) {
-                            // Ignore stale conversations (older than 2 hours)
-                            accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
+                        maxLookBackTime = await getMaxLookBackTime();
+                        if ( lastAccountActivityObserved.getTime() < maxLookBackTime.getTime() ) {
+                                // Ignore stale conversations
+                                accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
                         }
-                    } */
+                    }
 
                     const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if (!shouldContinue) {
@@ -243,8 +258,8 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     }
 
                     // console.debug(`Last activity time: ${lastAccountActivityObserved}`);
-                    // Add a small delay to avoid overwhelming APIs with low rate limits.
-                    await new Promise(resolve => setTimeout(resolve, 150));
+                    // Add a small delay to minimize rate-limiting.
+                    await new Promise(resolve => setTimeout(resolve, 500));
 
                 } catch (error) {
                     console.warn(`Error checking activity for ${followedAccount}:`, error);
@@ -362,7 +377,7 @@ async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
     const newActivityCount = countNewActivities(accountsWithNewActivity);
     console.log(`Number of accounts with new activity: ${newActivityCount}`);
     if (newActivityCount > 0) {
-        const notificationMessage = `${newActivityCount} of your followed accounts had posts, comments, or replies!`;
+        const notificationMessage = `Your followed accounts had posts, comments, or replies!`;
         await chrome.storage.local.set({
             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
             currentCheckTime: currentCheckTime

@@ -28,9 +28,16 @@
         <div class="content">
             <div class="left-sidebar"></div>
             <main class="main-content">
+                <h2>Activity from followed accounts:</h2>
                 <ul id="accountsList">
                     <!-- Accounts with new activity will be dynamically added here -->
                 </ul>
+                <div id="taggedCommentsSection">
+                    <h2>Activity under followed tags:</h2>
+                    <ul id="taggedCommentsList">
+                        <!-- Tagged comments will be dynamically added here -->
+                    </ul>
+                </div>
             </main>
             <div class="right-sidebar"></div>
         </div>
@@ -40,5 +47,6 @@
     <script src="steemHelpers.js"></script>
     <script src="localStorageUtils.js"></script>
     <script src="activityList.js"></script>
+    <script src="ContentFetcher.js"></script>
 </body>
 </html>

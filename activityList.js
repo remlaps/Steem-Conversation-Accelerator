@@ -39,6 +39,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             uniqueAccountsWithNewActivity = nonIgnoredAccountsWithNewActivity;
             uniqueAccountsWithNewActivity = await updateAccountsList(uniqueAccountsWithNewActivity, steemObserverName, allIgnores);
 
+            // Fetch and display tagged comments
+            await displayTaggedComments();
+
+            lockReadDeleteTaggedComments();
+
             // Save the stored account array and save the previousAlertTime to chrome.storage.local
             saveStoredAccountsWithNewActivity(uniqueAccountsWithNewActivity)
                 .then(() => {
@@ -60,6 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
         console.log(`Could not get array lock in activityList.`);
     }
+
     await deleteDuplicateTable();
      // After all data is loaded and the page is populated, change the background color
      document.body.style.backgroundColor = getComputedStyle(document.documentElement)
@@ -78,6 +84,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
 
     const apiEndpoint = await getApiServerName();
     const webServerName = await getWebServerName();
+    let activityFound = false;
 
     for (const followedAccountObj of uniqueAccountsWithNewActivity) {
         let lastActivity;
@@ -94,41 +101,50 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
         const ldt = followedAccountObj.lastDisplayTime;
         const followedAcct = followedAccountObj.account;
         const actTime = followedAccountObj.activityTime;
-        try {
-            // Account history checks are time consuming.  Only check accounts that were flagged during background polling.
-            // This means that some accounts with updates might not display until after the next polling cycle.
-            let content;
 
-            if (new Date(ldt) < new Date(actTime)) {
+        try {
+            const maxLookBackTime = await getMaxLookBackTime(); // Get the maximum lookback time
+            // Convert maxLookBackTime to a Date object in UTC
+            const maxLookBackDate = new Date(maxLookBackTime);
+
+
+            // Only process if maxLookBackTime is newer than ldt
+            if ( new Date(ldt) > maxLookBackDate ) {
                 activities = await getAccountActivities(followedAcct, ldt, apiEndpoint);
                 content = await processAllItems(...Object.values(activities), followedAcct, apiEndpoint,
                     webServerName, ldt, steemObserverName, allIgnores);
                 listItem.innerHTML = content;
-            }
+            } 
+
             if (isEmptyActivityList(activities)) {
                 lastActivity = new Date(`${actTime}`);
             } else {
                 lastActivity = getLastActivityTimeFromAll(activities);
+                activityFound = true;
             }
         } catch (error) {
             console.warn(`Error fetching activities for account ${followedAcct} after ${actTime}: ${error}.`);
-            // listItem.textContent = `Error fetching activities for account ${followedAccountObj.account}`;
             continue;
         }
 
         accountsList.appendChild(listItem);
         uniqueAccountsWithNewActivity = updateLastDisplayTime(uniqueAccountsWithNewActivity, followedAccountObj.account, lastActivity);
     }
+    if ( ! activityFound ) {
+        accountsList.innerHTML = '<li>No new activity detected.</li>';
+    }
     return uniqueAccountsWithNewActivity;
 }
 
+
 async function createContentItem(item, type, webServerName, rootInfo, allIgnores ) {
     // No need to check duplicates here.  They were filtered out earlier.
-    let author, title, permlink, body, timestamp, parent_author, parent_permlink, root_author, root_permlink, root_title;
+    let author, title, permlink, body, timestamp, parent_author, parent_permlink, depth, root_author, root_permlink, root_title;
 
     if (item && item[1] && item[1].op && Array.isArray(item[1].op) && item[1].op.length > 1 && item[1].op[1]) {
         const itemData = item[1].op[1];
         author = itemData.author || "Undefined author";
+        depth = itemData.depth || 0;
         title = itemData.title || "Title missing";
         permlink = itemData.permlink || "Permlink missing";
         body = itemData.body || "Body is empty";
@@ -154,16 +170,26 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
 
     content += `<strong>Author:</strong> <a href="${webServerName}/@${author}" target="_blank">${author}</a> / <strong>Date & Time:</strong> <a href="${webServerName}/@${author}/${permlink}" target="_blank">${new Date(timestamp + 'Z').toLocaleString()}</a><br>`;
 
+    const apiEndpoint = await getApiServerName();
+    const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
+    let tags = "[]";
+
     if (type === 'post') {
         content += `<strong>Post: <A HREF="${webServerName}/@${author}/${permlink}" target="_blank">${title}</a></strong>`;
+        const Post = await fetcher.getContent(author, permlink, depth);
+        tags = fetcher.getTags(Post.category, Post.json_metadata);
     } else {
         // For comments and replies
 
         const root_author = rootInfo.root_author;
         const root_permlink = rootInfo.root_permlink;
         const root_title = rootInfo.root_title;
+        const root_depth = rootInfo.root_depth;
 
         content += `<strong>Thread: </strong><a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${root_title}</a><br>`;
+
+        const rootPost = await fetcher.getContent(root_author, root_permlink, root_depth);
+        tags = fetcher.getTags(rootPost.category, rootPost.json_metadata);
 
         if (parent_author !== root_author || parent_permlink !== root_permlink) {
             // This is a nested reply
@@ -171,6 +197,11 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
         }
     }
 
+
+
+    content += `<b>Tags</b>: ${typeof tags === 'string' ?
+        tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') :
+        'No tags available'}<br>`;
     content += '<br><br>';
     content += `${bodySnippet}...`;
     content += '<br>';
@@ -334,3 +365,109 @@ async function getAllIgnoredAccounts(account) {
     const filteredReplies = replyList.filter(reply => !allIgnores.includes(reply[1].op[1].author));
     return filteredReplies;
   }
+
+  async function lockReadDeleteTaggedComments() {
+    // Acquire the tagged comments lock with higher priority
+    const lockAcquired = await acquireTaggedCommentsLock('activityList', 2);
+    if (!lockAcquired) {
+        console.log('Failed to acquire tag lock, retrying later');
+        return;
+    }
+
+    try {
+        // Read the stored tagged comments from chrome.storage.local
+        const result = await chrome.storage.local.get('taggedComments');
+        const taggedComments = result.taggedComments || [];
+
+        // Log the stored tagged comments
+        console.log('Stored tagged comments:', taggedComments);
+
+        // Process the list of tagged comments (e.g., log each comment)
+        taggedComments.forEach(comment => {
+            console.log('Processing comment:', comment);
+            // You can add additional processing logic here if needed
+        });
+
+        // Delete the stored tagged comments
+        await chrome.storage.local.set({ taggedComments: [] });
+        console.log('Tagged comments deleted from storage');
+    } catch (error) {
+        console.error('Error processing tagged comments:', error);
+    } finally {
+        // Release the tagged comments lock
+        await releaseTaggedCommentsLock('activityList');
+        console.log('Tag lock released');
+    }
+}
+
+async function displayTaggedComments() {
+    const result = await chrome.storage.local.get('taggedComments');
+    const taggedComments = result.taggedComments || [];
+    const taggedCommentsList = document.getElementById('taggedCommentsList');
+    const apiEndpoint = await getApiServerName();
+
+    // Clear the existing list
+    taggedCommentsList.innerHTML = '';
+
+    if (taggedComments.length === 0) {
+        taggedCommentsList.innerHTML = '<li>No activity found under followed tags.</li>';
+        return;
+    }
+
+    // Create a Set to track unique comments
+    const uniqueComments = new Set();
+    const uniqueTaggedComments = taggedComments.filter(comment => {
+        const identifier = `${comment.author}-${comment.permlink}`;
+        if (!uniqueComments.has(identifier)) {
+            uniqueComments.add(identifier);
+            return true; // Keep this comment
+        }
+        return false; // Skip this comment
+    });
+
+    // Create list items for each unique tagged comment
+    const webServerName = await getWebServerName();
+    uniqueTaggedComments.forEach(async comment => {
+        const { author, permlink, title, body = "", tags } = comment;
+        const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
+        const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
+    
+        let replyTitleLabel = "";
+        if (!title) {
+            const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
+            const Post = await fetcher.getContent(author, permlink); // Call the getContent method
+            replyTitleLabel = `Re: ${Post.root_title}`; // Assuming Post.root_title is defined
+        }
+        const displayTitle = replyTitleLabel || title || "No title available";
+
+        console.debug(`Root title: ${replyTitleLabel}, Title: ${title}, Display title: ${displayTitle}`);
+        const listItem = document.createElement('li');
+        listItem.innerHTML = `
+            <div class="account-content" open>
+                <details class="account-details" open>
+                    <summary class="account-summary">
+                        <a href="${webServerName}/@${author}" target="_blank">@${author}</a>
+                    </summary>
+                    <details class="content-details" open>
+                        <summary class="content-summary">
+                            <a href="${webServerName}/@${author}/${permlink}" target="_blank">${displayTitle}</a>
+                        </summary>
+                        <postdetails class="post-details" open>
+                            <div class="content-inner">
+                                <div class="indented-content">
+                                    <div class="post-box">
+                                        <b>Tags</b>: ${typeof tags === 'string' ?
+                                            tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') :
+                                            'No tags available'}<br>
+                                        <b>Body snippet</b>: ${bodySnippet}<br>
+                                    </div>
+                                </div>
+                            </div>
+                        </postDetails>
+                    </details>
+                </details>
+            </div>
+        `;
+        taggedCommentsList.appendChild(listItem);
+    });
+}

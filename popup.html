@@ -16,6 +16,8 @@
                 <option value="10" selected>10</option>
                 <option value="30">30</option>
                 <option value="60">60</option>
+                <option value="90">90</option>
+                <option value="120">120</option>
             </select>
         </div>
         <div id="lockStatus" class="popup-settings-lock-status">
@@ -26,27 +28,43 @@
         </div>
     </div>
 
-    <label for="steemObserverName" class="popup-settings-label">Steem Observer Account</label>
-    <input type="text" id="steemObserverName" placeholder="Enter the Steem observer account name" maxlength="16" class="popup-settings-input popup-settings-short-input">
+    <div class="popup-settings-main-row">
+        <div class="popup-settings-left-column">
+            <label for="steemObserverName" class="popup-settings-label">Steem Observer Account</label>
+            <input type="text" id="steemObserverName" placeholder="Enter the Steem observer account name" maxlength="16" class="popup-settings-input popup-settings-short-input">
 
-    <label for="apiServerName" class="popup-settings-label">API Endpoint</label>
-    <select id="apiServerName" class="popup-settings-select">
-        <option value="https://api.moecki.online" selected>api.moecki.online</option>
-        <option value="https://api.steememory.com">api.steememory.com</option>
-        <option value="https://api.steemit.com">api.steemit.com</option>
-        <option value="https://api.steemitdev.com">api.steemitdev.com</option>
-    </select>
+            <label for="apiServerName" class="popup-settings-label">API Endpoint</label>
+            <select id="apiServerName" class="popup-settings-select">
+                <option value="https://api.moecki.online" selected>api.moecki.online</option>
+                <option value="https://api.steememory.com">api.steememory.com</option>
+                <option value="https://api.steemit.com">api.steemit.com</option>
+                <option value="https://api.steemitdev.com">api.steemitdev.com</option>
+            </select>
 
-    <label for="webServerName" class="popup-settings-label">Web Server</label>
-    <select id="webServerName" class="popup-settings-select">
-        <option value="https://steemit.moecki.online" selected>@moecki</option>
-        <option value="https://steemit.com" selected>Steemit Prod</option>
-        <option value="https://steemitdev.com">Steemit Dev</option>
-        <option value="https://steempro.com">SteemPro</option>
-        <option value="https://upvu.org">Upvu</option>
-    </select>
+            <label for="webServerName" class="popup-settings-label">Web Server</label>
+            <select id="webServerName" class="popup-settings-select">
+                <option value="https://steemit.moecki.online">@moecki</option>
+                <option value="https://steemit.com">Steemit Prod</option>
+                <option value="https://steemitdev.com">Steemit Dev</option>
+                <option value="https://steempro.com">SteemPro</option>
+                <option value="https://upvu.org">Upvu</option>
+            </select>
+        </div>
+        <div class="popup-settings-right-column">
+            <!-- Social Media Tags Section -->
+            <div class="popup-settings-tags-section">
+                <h3 class="popup-settings-subtitle">Social Media Tags</h3>
+                <input type="text" id="newTag" placeholder="Enter a new tag" class="popup-settings-input popup-settings-short-input">
+                <button id="addTagButton" class="popup-settings-save-button">Add Tag</button>
+                <select id="tagsDropdown" class="popup-settings-select">
+                    <!-- Tags will be dynamically added here -->
+                </select>
+                <button id="deleteTopTagButton" class="popup-settings-save-button">Delete Selected Tag</button>
+            </div>
+        </div>
+    </div>
 
-        <button id="saveButton" class="popup-settings-save-button">Save Settings</button>
+    <button id="saveButton" class="popup-settings-save-button">Save Settings</button>
 
     <script src="popup.js"></script>
     <script src="commonUtils.js"></script>
