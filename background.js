@@ -243,13 +243,14 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
                     const newActivity = updateAccountActivity(followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if ( newActivity ) {
                         newActivityFound = true;
-                    } /*  Not sure what this accomplishes(?)
+                    }
                     else {
-                        if ( new Date().getTime() - lastAccountActivityObserved.getTime() > 2 * 60 * 60 * 1000 ) {
-                            // Ignore stale conversations (older than 2 hours)
-                            accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
+                        maxLookBackTime = await getMaxLookBackTime();
+                        if ( lastAccountActivityObserved.getTime() < maxLookBackTime.getTime() ) {
+                                // Ignore stale conversations
+                                accountsWithNewActivity = deleteTriplet(accountsWithNewActivity, followedAccount);
                         }
-                    } */
+                    }
 
                     const shouldContinue = await saveProgressEveryTenAccounts(i, followedAccount, searchMin, lastAccountActivityObserved, accountsWithNewActivity);
                     if (!shouldContinue) {
@@ -258,7 +259,7 @@ async function checkForNewActivitySinceLastNotification(steemObserverName) {
 
                     // console.debug(`Last activity time: ${lastAccountActivityObserved}`);
                     // Add a small delay to minimize rate-limiting.
-                    await new Promise(resolve => setTimeout(resolve, 300));
+                    await new Promise(resolve => setTimeout(resolve, 500));
 
                 } catch (error) {
                     console.warn(`Error checking activity for ${followedAccount}:`, error);
@@ -376,7 +377,7 @@ async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
     const newActivityCount = countNewActivities(accountsWithNewActivity);
     console.log(`Number of accounts with new activity: ${newActivityCount}`);
     if (newActivityCount > 0) {
-        const notificationMessage = `${newActivityCount} of your followed accounts had posts, comments, or replies!`;
+        const notificationMessage = `Your followed accounts had posts, comments, or replies!`;
         await chrome.storage.local.set({
             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
             currentCheckTime: currentCheckTime
