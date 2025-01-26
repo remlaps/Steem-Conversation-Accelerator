@@ -16,7 +16,7 @@ importScripts('steemHelpers.js');
 importScripts('commentFetcher.js');
 importScripts('contentFetcher.js');
 
-let commentFetcher;
+let commentFetcher, resultsFetched = null;
 async function initializeCommentFetcher() {
     const apiServerName = await getApiServerName();
     commentFetcher = new CommentFetcher(apiServerName);
@@ -126,27 +126,43 @@ chrome.idle.onStateChanged.addListener((state) => {
  */
 chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === 'checkSteemActivity') {
-        // console.log("Alarm recieved.");
+        // console.log("Alarm received.");
         chrome.storage.local.get(['steemObserverName'], async (result) => {
             const steemObserverName = result.steemObserverName;
             commentFetcher.changeApiEndpoint(await getApiServerName());
             if (steemObserverName) {
-                const [newActivityResult, fetchedCommentsResult] = await Promise.all([
-                    checkForNewActivitySinceLastNotification(steemObserverName),
-                    commentFetcher.fetchComments(),
-                    commentFetcher.saveComments()
-                ]);
+                // Create a deep copy of commentFetcher
+                const taggedCommentFilter = Object.create(
+                    Object.getPrototypeOf(commentFetcher),
+                    Object.getOwnPropertyDescriptors(commentFetcher)
+                );
+
+                try {
+                    const newActivityResult = await checkForNewActivitySinceLastNotification(steemObserverName);
+                    const fetchedCommentsResult = await commentFetcher.fetchComments();
+                    const filteredCommentsResult = await taggedCommentFilter.filterCommentsByTag();
+
+                    // Create a new storage location for results
+                    resultsFetched = Object.create(
+                        Object.getPrototypeOf(taggedCommentFilter),
+                        Object.getOwnPropertyDescriptors(taggedCommentFilter)
+                    );
+
+                    // Save comments to resultsFetched
+                    await resultsFetched.saveComments();
+                } catch (error) {
+                    console.error('Error during checkSteemActivity:', error);
+                }
             } else {
                 console.debug('Alarm triggered, but the Steem username is not set in SCA.');
                 console.debug('Please set it in the extension settings.');
             }
         });
         // console.log("Ending alarm processing.");
-    } else if ( alarm.name === 'idleTimeoutAlarm') {
+    } else if (alarm.name === 'idleTimeoutAlarm') {
         clearAlarms();
     }
 });
-
 
 // Handle notification click
 chrome.notifications.onClicked.addListener(() => {
@@ -376,7 +392,8 @@ async function updateCheckTimes() {
 async function handleNewActivity(accountsWithNewActivity, currentCheckTime) {
     const newActivityCount = countNewActivities(accountsWithNewActivity);
     console.log(`Number of accounts with new activity: ${newActivityCount}`);
-    if (newActivityCount > 0) {
+    console.log(`Size of commentFetcher: ${resultsFetched.getSize()}`);
+    if (newActivityCount > 0  || resultsFetched.getSize() > 0) {
         const notificationMessage = `Your followed accounts had posts, comments, or replies!`;
         await chrome.storage.local.set({
             accountsWithNewActivity: JSON.stringify(accountsWithNewActivity),
@@ -725,5 +742,3 @@ function setupAlarms() {
         });
     });
 }
-
-

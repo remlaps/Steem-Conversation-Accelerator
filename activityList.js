@@ -197,8 +197,6 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
         }
     }
 
-
-
     content += `<b>Tags</b>: ${typeof tags === 'string' ?
         tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') :
         'No tags available'}<br>`;
@@ -293,6 +291,12 @@ function convertToPlainText(html) {
 
     // Set the HTML content
     temp.innerHTML = html;
+
+    // Remove all <img> elements to prevent loading external images
+    const images = temp.getElementsByTagName('img');
+    while (images.length > 0) {
+        images[0].parentNode.removeChild(images[0]);
+    }
 
     // Get the text content
     let text = temp.textContent || temp.innerText || '';

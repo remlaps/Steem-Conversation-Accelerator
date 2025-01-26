@@ -1,10 +1,16 @@
 class ContentFetcher {
     constructor(apiEndpoint = 'https://api.steemit.com') {
         this.apiEndpoint = apiEndpoint;
+        this.retryErrors = [503]; // List of HTTP errors to retry
     }
 
-    async fetchContent(account, permlink) {
+    sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    async fetchContent(account, permlink, retries = 10) {
         try {
+            // console.debug(`Trying fetchContent: ${account}/${permlink}, retries: ${retries}, apiEndpoint: ${this.apiEndpoint}`);
             const response = await fetch(this.apiEndpoint, {
                 method: 'POST',
                 headers: {
@@ -18,15 +24,25 @@ class ContentFetcher {
                 })
             });
 
+            // console.debug(`fetchContent: ${response.status} ${response.statusText}`);
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                if (this.retryErrors.includes(response.status) && retries > 0) {
+                    console.warn(`HTTP error ${response.status}. Retrying in 1 second...`);
+                    await this.sleep(1000);
+                    return this.fetchContent(account, permlink, retries - 1);
+                } else {
+                    console.warn(`HTTP error! status: ${response.status}`);
+                    return;
+                }
             }
 
             const data = await response.json();
+            // console.debug(`fetchContent: ${data.result.author}/${data.result.permlink}`);
             return data.result;
-            
+
         } catch (error) {
-            throw new Error(`Failed to fetch content: ${error.message}`);
+            console.debug(`Failed to fetch content: ${error.message}, retries: ${retries}, apiEndpoint: ${this.apiEndpoint}
+                ${account}/${permlink}`);
         }
     }
 

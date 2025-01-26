@@ -8,7 +8,11 @@ class CommentFetcher {
         this.lastProcessedDate = null;
         this.currentStart = null;
         this.cutoffTime = null;
-        this.taggedCommentsBuffer = []; // Temporary buffer to store tagged comments
+        this.taggedCommentsBuffer = []; // Fetched and/or filtered comments
+    }
+
+    getSize() {
+        return this.taggedCommentsBuffer.length;
     }
 
     async initializeStartTime() {
@@ -23,17 +27,11 @@ class CommentFetcher {
             now.getUTCSeconds()
         ));
 
-        // Get 30 minutes ago in UTC
-        const thirtyMinutesAgo = new Date(utcNow.getTime() - (30 * 60 * 1000));
-
-        // Set initial start time to 7 days after thirty minutes ago
-        this.currentStart = new Date(thirtyMinutesAgo.getTime() + (7 * 24 * 60 * 60 * 1000))
-            .toISOString()
-            .replace(/\.\d{3}Z$/, '');
-
-        this.cutoffTime = thirtyMinutesAgo.toISOString().replace(/\.\d{3}Z$/, '');
-
+        // Get max lookback time
+        const maxLookbackTime = await getMaxLookBackTime();
+        this.cutoffTime = maxLookbackTime.toISOString().replace(/\.\d{3}Z$/, '');
         console.log('UTC Now:', utcNow.toISOString());
+        console.log('Max lookback time:', maxLookbackTime.toISOString());
         console.log('Cutoff time:', this.cutoffTime);
 
         const stored = await chrome.storage.local.get(['lastProcessedDate']);
@@ -50,7 +48,13 @@ class CommentFetcher {
                 lastProcessedUTC.getUTCSeconds()
             ));
             console.log(`Stored date: ${lastProcessedUTC}`);
+            // Add 7 days to the stored date
             this.currentStart = new Date(this.currentStart.getTime() + (7 * 24 * 60 * 60 * 1000))
+                .toISOString()
+                .replace(/\.\d{3}Z$/, '');
+        } else {
+            // Set initial start time to 7 days after max lookback time (this looks at payout time, not posting time)
+            this.currentStart = new Date(maxLookbackTime.getTime() + (7 * 24 * 60 * 60 * 1000))
                 .toISOString()
                 .replace(/\.\d{3}Z$/, '');
         }
@@ -88,6 +92,17 @@ class CommentFetcher {
                     body: JSON.stringify(payload)
                 });
 
+                if (!response.ok) {
+                    console.warn(`HTTP error! status: ${response.status}`);
+                    return false;
+                }
+    
+                const contentType = response.headers.get('content-type');
+                if (!contentType || !contentType.includes('application/json')) {
+                    console.debug('Received non-JSON response:', await response.text());
+                    return false;
+                }
+
                 const data = await response.json();
 
                 if (!data.result?.comments || !Array.isArray(data.result.comments)) {
@@ -121,6 +136,7 @@ class CommentFetcher {
                         title
                     } = comment;
 
+
                     if (created.startsWith('2016')) {
                         console.log("Reached 2016 posts - stopping to avoid infinite loop");
                         return true;
@@ -139,18 +155,11 @@ class CommentFetcher {
                     newDataFound = true;
                     const fetcher = new ContentFetcher(this.apiEndpoint);
                     let tags = fetcher.getTags(category, json_metadata);
-                    if ( root_author !== author || root_permlink !== permlink ) {
-                        const rootPost = fetcher.getContent(root_author, root_permlink);
+                    if (root_author !== author || root_permlink !== permlink) {
+                        const rootPost = await fetcher.getContent(root_author, root_permlink);
                         const rootJsonMetadata = rootPost.json_metadata;
                         tags = `${tags};${fetcher.getTags(rootPost.category, rootJsonMetadata, rootPost.depth)}`;
                     }
-
-
-                    // Load tags from chrome.storage.local
-                    let savedTags = '';
-                    const tagsResult = await chrome.storage.local.get(['tags']);
-                    savedTags = tagsResult.tags || [];
-                    this.logComments(comment, tags, savedTags);
 
                     this.depthCount.set(depth, (this.depthCount.get(depth) || 0) + 1);
                     this.authors.add(author);
@@ -177,8 +186,10 @@ class CommentFetcher {
                     this.currentStart = new Date(this.currentStart.getTime() + (7 * 24 * 60 * 60 * 1000))
                         .toISOString()
                         .replace(/\.\d{3}Z$/, '');
+
+                    this.logComments(comment, tags);
                 }
-                this.saveComments();
+
                 console.log(`Fetch complete: ${this.currentStart}`);
 
                 totalProcessed += comments.length;
@@ -211,32 +222,64 @@ class CommentFetcher {
 
         // Save the last processed date to storage
         await chrome.storage.local.set({ lastProcessedDate: this.lastProcessedDate });
+        console.log('Last processed date saved:', this.lastProcessedDate);
         return true;
     }
 
-    async startPolling(intervalMinutes = 10) {
-        if (this.isRunning) return;
-        this.isRunning = true;
+    async filterCommentsByTag() {
 
-        await this.initializeStartTime();
+        console.log('Filtering comments by tag');
+        if (this.taggedCommentsBuffer.length === 0) {
+            console.log('No comments to filter');
+            return;
+        }
 
-        const poll = async () => {
-            if (!this.isRunning) return;
-
-            console.log(`Fetching comments from ${this.currentStart}`);
-            const hasMore = await this.fetchComments();
-
-            // Save comments to storage after fetching
-            await this.saveComments();
-
-            setTimeout(poll, intervalMinutes * 60 * 1000);
-        };
-
-        await poll();
-    }
-
-    stopPolling() {
-        this.isRunning = false;
+        console.log('Before processing, taggedCommentsBuffer:', this.taggedCommentsBuffer);
+        const comments = this.taggedCommentsBuffer;
+        this.taggedCommentsBuffer = [];
+        console.log('After assigning, comments:', comments);
+        for (const comment of comments) {
+            if ( !comment.json_metadata ) {
+                continue;
+            }
+            const {
+                author,
+                body,
+                category,
+                created,
+                depth,
+                parent_author,
+                parent_permlink,
+                permlink,
+                root_author,
+                root_permlink,
+                json_metadata,
+                title
+            } = comment;
+    
+            const fetcher = new ContentFetcher(this.apiEndpoint);
+            let tags = fetcher.getTags(category, json_metadata);
+            
+            // Load tags from chrome.storage.local and check for matches
+            let savedTags = '';
+            const tagsResult = await chrome.storage.local.get(['tags']);
+            savedTags = tagsResult.tags || [];
+            const tagArray = tags ? tags.split(';') : [];
+            const isMatch = savedTags.some(filter => tagArray.includes(filter));
+    
+            // Only process comments that match the savedTags
+            if (isMatch) {
+                if (root_author !== author || root_permlink !== permlink) {
+                    const rootPost = await fetcher.getContent(root_author, root_permlink);
+                    const rootJsonMetadata = rootPost.json_metadata;
+                    tags = `${tags};${fetcher.getTags(rootPost.category, rootJsonMetadata, rootPost.depth)}`;
+                }
+                this.logComments(comment, tags );
+                console.log('Comment matches saved tags');
+                console.dir(comment);
+            } else {  // Ignore it }
+            }
+        }
     }
 
     changeApiEndpoint(apiEndpoint) {
@@ -252,7 +295,7 @@ class CommentFetcher {
         };
     }
 
-    logComments(comment, tags, tagFilters = '') {
+    logComments(comment, tags) {
         const {
             author,
             body,
@@ -268,10 +311,12 @@ class CommentFetcher {
         } = comment;
 
         // Split the tags string into an array of words
-        const tagArray = tags.split(';');
-
-        // Check if any tag in the tagArray matches any tagFilter
-        const isMatch = tagArray.some(filter => tagFilters.includes(filter));
+        let tagArray
+        if ( tags.length ) {
+            tagArray = tags.split(';');
+        } else {
+            tagArray = [];
+        }
 
         // Create a record object
         const record = {
@@ -289,15 +334,9 @@ class CommentFetcher {
             title
         };
 
-        // Log the comment if tagFilters is empty or there's a match
-        if (tagFilters.length === 0 || isMatch) {
-            console.log(record);
-            // Store the record in the buffer
-            this.taggedCommentsBuffer.push(record);
-        }
+        this.taggedCommentsBuffer.push(record);
     }
 
-    // In commentFetcher.js
     async saveComments() {
         if (this.taggedCommentsBuffer.length === 0) {
             console.log('No comments to save');
