@@ -150,6 +150,7 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 
                     // Save comments to resultsFetched
                     await resultsFetched.saveComments();
+                    console.log("Results fetched and saved: ", resultsFetched.getSize());
                 } catch (error) {
                     console.error('Error during checkSteemActivity:', error);
                 }

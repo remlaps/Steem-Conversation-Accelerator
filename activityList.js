@@ -107,7 +107,6 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
             // Convert maxLookBackTime to a Date object in UTC
             const maxLookBackDate = new Date(maxLookBackTime);
 
-
             // Only process if maxLookBackTime is newer than ldt
             if ( new Date(ldt) > maxLookBackDate ) {
                 activities = await getAccountActivities(followedAcct, ldt, apiEndpoint);
@@ -163,7 +162,7 @@ async function createContentItem(item, type, webServerName, rootInfo, allIgnores
     // console.debug(`Inside createContentItem - Ignores:${allIgnores}`);
 
 
-    const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
+    const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body).substring(0,255);
     const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
 
     let content = `<li class="post-box">`;
@@ -289,14 +288,82 @@ function convertToPlainText(html) {
     // Create a temporary DOM element
     const temp = document.createElement('div');
 
-    // Set the HTML content
-    temp.innerHTML = html;
+    // Sanitize the HTML content using DOMPurify
+    const sanitizedHtml = DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'] });
+
+    // Set the sanitized HTML content
+    temp.innerHTML = sanitizedHtml;
 
     // Remove all <img> elements to prevent loading external images
     const images = temp.getElementsByTagName('img');
     while (images.length > 0) {
         images[0].parentNode.removeChild(images[0]);
     }
+
+    // Remove any remaining external resource references
+    const scripts = temp.getElementsByTagName('script');
+    while (scripts.length > 0) {
+        scripts[0].parentNode.removeChild(scripts[0]);
+    }
+
+    const iframes = temp.getElementsByTagName('iframe');
+    while (iframes.length > 0) {
+        iframes[0].parentNode.removeChild(iframes[0]);
+    }
+
+    // Get the text content
+    let text = temp.textContent || temp.innerText || '';
+
+    // Remove markdown image syntax
+    text = text.replace(/\[!\[.*?\]\(.*?\)\]/g, '');  // Remove nested image markdown
+    text = text.replace(/!\[.*?\]\(.*?\)/g, '');      // Remove regular image markdown
+
+    // Remove markdown link syntax
+    text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
+
+    // Remove other common markdown syntax
+    text = text.replace(/[#*_~`]/g, '');
+
+    return text.trim();
+}
+
+function convertToPlainText(html) {
+    // Create a temporary DOM element
+    const temp = document.createElement('div');
+
+    // Sanitize the HTML content using DOMPurify
+    const sanitizedHtml = DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'] });
+
+    // Set the sanitized HTML content
+    temp.innerHTML = sanitizedHtml;
+
+    // Remove all <img> elements to prevent loading external images
+    const images = temp.getElementsByTagName('img');
+    while (images.length > 0) {
+        images[0].parentNode.removeChild(images[0]);
+    }
+
+    // Remove any remaining external resource references
+    const scripts = temp.getElementsByTagName('script');
+    while (scripts.length > 0) {
+        scripts[0].parentNode.removeChild(scripts[0]);
+    }
+
+    const iframes = temp.getElementsByTagName('iframe');
+    while (iframes.length > 0) {
+        iframes[0].parentNode.removeChild(iframes[0]);
+    }
+
+    // Remove any elements with src or href attributes that point to external resources
+    const elementsWithSrc = temp.querySelectorAll('[src]');
+    elementsWithSrc.forEach(element => {
+        element.removeAttribute('src');
+    });
+
+    const elementsWithHref = temp.querySelectorAll('[href]');
+    elementsWithHref.forEach(element => {
+        element.removeAttribute('href');
+    });
 
     // Get the text content
     let text = temp.textContent || temp.innerText || '';
@@ -429,13 +496,17 @@ async function displayTaggedComments() {
         return false; // Skip this comment
     });
 
+    const maxLookBackTime = await getMaxLookBackTime(); // Get the maximum lookback time
+    const { lastActivityPageViewTime } = await chrome.storage.local.get('lastActivityPageViewTime');
+    const lastActivityPageViewDate = new Date(lastActivityPageViewTime); // This will be in UTC
+
     // Create list items for each unique tagged comment
     const webServerName = await getWebServerName();
     uniqueTaggedComments.forEach(async comment => {
-        const { author, permlink, title, body = "", tags } = comment;
+        const { author, permlink, title, body = "", tags, created } = comment;
         const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
         const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
-    
+
         let replyTitleLabel = "";
         if (!title) {
             const fetcher = new ContentFetcher(apiEndpoint); // Create an instance of ContentFetcher
@@ -443,6 +514,18 @@ async function displayTaggedComments() {
             replyTitleLabel = `Re: ${Post.root_title}`; // Assuming Post.root_title is defined
         }
         const displayTitle = replyTitleLabel || title || "No title available";
+
+        // Parse the created date as UTC
+        const createdDate = new Date(Date.parse(created + 'Z'));
+
+        if (createdDate < new Date(maxLookBackTime) || createdDate < lastActivityPageViewDate) {
+            console.debug(`${author}/${permlink} - created: ${createdDate}, maxLookBack : ${new Date(maxLookBackTime)}.`);
+            console.debug(`${author}/${permlink} - created: ${createdDate}, last viewed : ${lastActivityPageViewDate}.`);
+            return;
+        } else {
+            console.debug(`${author}/${permlink} - created: ${createdDate}, maxLookBack : ${new Date(maxLookBackTime)}.`);
+            console.debug(`${author}/${permlink} - created: ${createdDate}, last viewed : ${lastActivityPageViewDate}.`);
+        }
 
         console.debug(`Root title: ${replyTitleLabel}, Title: ${title}, Display title: ${displayTitle}`);
         const listItem = document.createElement('li');
