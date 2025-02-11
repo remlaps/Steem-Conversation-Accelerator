@@ -138,7 +138,7 @@ async function updateAccountsList(uniqueAccountsWithNewActivity, steemObserverNa
 
 async function createContentItem(item, type, webServerName, rootInfo, allIgnores ) {
     // No need to check duplicates here.  They were filtered out earlier.
-    let author, title, permlink, body, timestamp, parent_author, parent_permlink, depth, root_author, root_permlink, root_title;
+    let author, title, permlink, body, timestamp, parent_author, parent_permlink, depth, root_author, root_permlink;
 
     if (item && item[1] && item[1].op && Array.isArray(item[1].op) && item[1].op.length > 1 && item[1].op[1]) {
         const itemData = item[1].op[1];
@@ -284,86 +284,20 @@ async function generateContentSection(list, type, webServerName, account, apiEnd
     `;
 }
 
-function convertToPlainText(html) {
+ function convertToPlainText(html) {
     // Create a temporary DOM element
     const temp = document.createElement('div');
 
     // Sanitize the HTML content using DOMPurify
-    const sanitizedHtml = DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'] });
+    const sanitizedHtml = DOMPurify.sanitize(html, { 
+        ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br',
+            'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'li',
+            'blockquote', 'code', 'pre' ],
+        FORBID_ATTR: ['src', 'href']
+    });
 
     // Set the sanitized HTML content
     temp.innerHTML = sanitizedHtml;
-
-    // Remove all <img> elements to prevent loading external images
-    const images = temp.getElementsByTagName('img');
-    while (images.length > 0) {
-        images[0].parentNode.removeChild(images[0]);
-    }
-
-    // Remove any remaining external resource references
-    const scripts = temp.getElementsByTagName('script');
-    while (scripts.length > 0) {
-        scripts[0].parentNode.removeChild(scripts[0]);
-    }
-
-    const iframes = temp.getElementsByTagName('iframe');
-    while (iframes.length > 0) {
-        iframes[0].parentNode.removeChild(iframes[0]);
-    }
-
-    // Get the text content
-    let text = temp.textContent || temp.innerText || '';
-
-    // Remove markdown image syntax
-    text = text.replace(/\[!\[.*?\]\(.*?\)\]/g, '');  // Remove nested image markdown
-    text = text.replace(/!\[.*?\]\(.*?\)/g, '');      // Remove regular image markdown
-
-    // Remove markdown link syntax
-    text = text.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1');
-
-    // Remove other common markdown syntax
-    text = text.replace(/[#*_~`]/g, '');
-
-    return text.trim();
-}
-
-function convertToPlainText(html) {
-    // Create a temporary DOM element
-    const temp = document.createElement('div');
-
-    // Sanitize the HTML content using DOMPurify
-    const sanitizedHtml = DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'em', 'strong', 'a', 'p', 'br'] });
-
-    // Set the sanitized HTML content
-    temp.innerHTML = sanitizedHtml;
-
-    // Remove all <img> elements to prevent loading external images
-    const images = temp.getElementsByTagName('img');
-    while (images.length > 0) {
-        images[0].parentNode.removeChild(images[0]);
-    }
-
-    // Remove any remaining external resource references
-    const scripts = temp.getElementsByTagName('script');
-    while (scripts.length > 0) {
-        scripts[0].parentNode.removeChild(scripts[0]);
-    }
-
-    const iframes = temp.getElementsByTagName('iframe');
-    while (iframes.length > 0) {
-        iframes[0].parentNode.removeChild(iframes[0]);
-    }
-
-    // Remove any elements with src or href attributes that point to external resources
-    const elementsWithSrc = temp.querySelectorAll('[src]');
-    elementsWithSrc.forEach(element => {
-        element.removeAttribute('src');
-    });
-
-    const elementsWithHref = temp.querySelectorAll('[href]');
-    elementsWithHref.forEach(element => {
-        element.removeAttribute('href');
-    });
 
     // Get the text content
     let text = temp.textContent || temp.innerText || '';
@@ -503,7 +437,7 @@ async function displayTaggedComments() {
     // Create list items for each unique tagged comment
     const webServerName = await getWebServerName();
     uniqueTaggedComments.forEach(async comment => {
-        const { author, permlink, title, body = "", tags, created } = comment;
+        const { author, permlink, title, body = "", tags, created, root_author, root_permlink } = comment;
         const plainBody = body.startsWith("@@") ? "[content edited]" : convertToPlainText(body);
         const bodySnippet = plainBody.length > 255 ? plainBody.substring(0, 255) + '...' : plainBody;
 
@@ -533,7 +467,7 @@ async function displayTaggedComments() {
             <div class="account-content" open>
                 <details class="account-details" open>
                     <summary class="account-summary">
-                        <a href="${webServerName}/@${author}" target="_blank">@${author}</a>
+                        <a href="${webServerName}/@${author}" target="_blank">@${author}</a> 
                     </summary>
                     <details class="content-details" open>
                         <summary class="content-summary">
@@ -543,6 +477,9 @@ async function displayTaggedComments() {
                             <div class="content-inner">
                                 <div class="indented-content">
                                     <div class="post-box">
+                                        <b>Author</b>: <a href="${webServerName}/@${author}" target="_blank">${author}</a> 
+                                        <b>Date & Time</b>: <a href="${webServerName}/@${author}/${permlink}" target="_blank">${created}</a><br>
+                                        <b>Thread</b>: <a href="${webServerName}/@${root_author}/${root_permlink}" target="_blank">${displayTitle}</a><br>
                                         <b>Tags</b>: ${typeof tags === 'string' ?
                                             tags.split(';').map(tag => `<a href="${webServerName}/created/${tag.trim()}" target="_blank">${tag.trim()}</a>`).join(', ') :
                                             'No tags available'}<br>

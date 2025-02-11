@@ -67,7 +67,7 @@ class ContentFetcher {
                 } else {
                     if (depth === 0) {
                         console.warn('jsonMeta.tags is not an array:', jsonMeta.tags);
-                        console.warn(`@${author}/${permlink}`);
+                        console.warn(`${jsonMeta}`);
                         tagsSet.add(jsonMeta.tags);
                     }
                 }
